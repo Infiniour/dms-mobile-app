@@ -9,7 +9,7 @@ import { BackButton, Button, TextField } from '@/components/ui';
 import { OtpSheet } from './OtpSheet';
 
 export function LoginScreen() {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const router = useRouter();
   const [phoneNumber, setPhoneNumber] = useState('');
   const [showOtpSheet, setShowOtpSheet] = useState(false);
@@ -68,7 +68,9 @@ export function LoginScreen() {
             />
             <Text style={[Typography.micro, styles.terms, { color: colors['on-surface-variant'] }]}>
               By continuing you agree to our{' '}
-              <Text style={{ color: colors.primary }}>Terms of service</Text>
+              <Text style={{ color: isDark ? colors['secondary-container'] : colors['primary-container'] }}>
+                Terms of service
+              </Text>
             </Text>
           </View>
         </View>

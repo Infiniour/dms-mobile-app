@@ -12,7 +12,7 @@ type OtpInputProps = {
 };
 
 export function OtpInput({ value, onChange, autoFocus }: OtpInputProps) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const inputRef = useRef<TextInput>(null);
 
   useEffect(() => {
@@ -38,8 +38,12 @@ export function OtpInput({ value, onChange, autoFocus }: OtpInputProps) {
             style={[
               styles.cell,
               {
-                borderColor: isActive ? colors.primary : colors['outline-variant'],
-                backgroundColor: colors['surface-container-lowest'],
+                borderColor: isDark
+                  ? colors['on-surface']
+                  : isActive
+                    ? colors.primary
+                    : colors.outline,
+                backgroundColor: colors.background,
               },
             ]}>
             <Text

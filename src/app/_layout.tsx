@@ -38,6 +38,7 @@ function RootNavigator() {
       }}>
       <Stack.Screen name="(auth)" />
       <Stack.Screen name="(app)" />
+      <Stack.Screen name="vehicle/[id]" />
     </Stack>
   );
 }

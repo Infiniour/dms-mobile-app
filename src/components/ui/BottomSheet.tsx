@@ -30,7 +30,7 @@ export function BottomSheet({ visible, onClose, children, style }: BottomSheetPr
           style={[
             styles.sheet,
             {
-              backgroundColor: colors['surface-container-lowest'],
+              backgroundColor: colors.background,
               paddingBottom: Math.max(insets.bottom, 24),
             },
             style,

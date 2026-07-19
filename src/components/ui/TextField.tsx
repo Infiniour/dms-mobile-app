@@ -15,7 +15,7 @@ type TextFieldProps = TextInputProps & {
 };
 
 export function TextField({ label, labelIcon, style, ...inputProps }: TextFieldProps) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
 
   return (
     <View style={styles.wrapper}>
@@ -36,8 +36,8 @@ export function TextField({ label, labelIcon, style, ...inputProps }: TextFieldP
           styles.input,
           {
             color: colors['on-surface'],
-            backgroundColor: colors['surface-container-lowest'],
-            borderColor: colors['outline-variant'],
+            backgroundColor: colors.background,
+            borderColor: isDark ? colors['outline-variant'] : colors.outline,
             fontFamily: Typography.body.fontFamily,
             fontSize: Typography.body.fontSize,
           },

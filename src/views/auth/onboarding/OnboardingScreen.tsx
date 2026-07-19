@@ -56,7 +56,7 @@ export default function OnboardingScreen() {
                 key={feature.label}
                 style={[
                   styles.featureCard,
-                  { backgroundColor: colors['on-primary-container'] },
+                  { backgroundColor: colors['surface-container'] },
                 ]}>
                 <Image source={feature.icon} style={styles.featureIcon} />
                 <Text

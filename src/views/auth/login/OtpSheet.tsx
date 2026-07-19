@@ -25,7 +25,7 @@ function maskPhoneNumber(phone: string) {
 }
 
 export function OtpSheet({ visible, phoneNumber, onClose, onVerify }: OtpSheetProps) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const [otp, setOtp] = useState('');
   const [secondsLeft, setSecondsLeft] = useState(RESEND_SECONDS);
 
@@ -64,12 +64,16 @@ export function OtpSheet({ visible, phoneNumber, onClose, onVerify }: OtpSheetPr
           style={({ pressed }) => [
             styles.closeButton,
             {
-              backgroundColor: colors['surface-container-low'],
+              backgroundColor: isDark ? colors['on-primary-container'] : colors['surface-container'],
               opacity: pressed ? 0.8 : 1,
             },
           ]}
           hitSlop={8}>
-          <Ionicons name="close" size={16} color={colors['on-surface-variant']} />
+          <Ionicons
+            name="close"
+            size={16}
+            color={isDark ? colors['secondary-container'] : colors.primary}
+          />
         </Pressable>
       </View>
 
@@ -91,7 +95,7 @@ export function OtpSheet({ visible, phoneNumber, onClose, onVerify }: OtpSheetPr
 
       <Text style={[Typography.body, styles.resend, { color: colors['on-surface-variant'] }]}>
         Didn't receive it?{' '}
-        <Text style={{ color: colors.primary }}>
+        <Text style={{ color: isDark ? colors['secondary-container'] : colors['primary-container'] }}>
           {secondsLeft > 0 ? `Resend in ${secondsLeft}s` : 'Resend'}
         </Text>
       </Text>

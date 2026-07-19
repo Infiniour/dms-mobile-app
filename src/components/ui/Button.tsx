@@ -26,23 +26,23 @@ export function Button({
   style,
   ...pressableProps
 }: ButtonProps) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
 
   const variantStyles = {
     primary: {
-      backgroundColor: colors.primary,
-      textColor: colors['on-primary'],
-      borderColor: colors.primary,
+      backgroundColor: isDark ? colors['secondary-container'] : colors.primary,
+      textColor: isDark ? colors['on-surface'] : colors['on-primary'],
+      borderColor: isDark ? colors['secondary-container'] : colors.primary,
     },
     secondary: {
-      backgroundColor: colors.secondary,
-      textColor: colors['on-secondary'],
-      borderColor: colors.secondary,
+      backgroundColor: colors['secondary-container'],
+      textColor: colors['on-secondary-container'],
+      borderColor: colors['secondary-container'],
     },
     outline: {
       backgroundColor: 'transparent',
-      textColor: colors.primary,
-      borderColor: colors.outline,
+      textColor: isDark ? colors['on-surface'] : colors.primary,
+      borderColor: isDark ? colors['outline-variant'] : colors.outline,
     },
   }[variant];
 
