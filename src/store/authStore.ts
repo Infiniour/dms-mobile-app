@@ -11,7 +11,7 @@ interface AuthState {
   phoneNumber: string;
   canEnterApp: boolean;
   primaryShowroomId: number | null;
-  /** Role in the primary showroom. Never persisted — refetched every cold start. */
+  /** Role in the primary showroom, persisted so a returning user skips the setup check on cold start. */
   primaryShowroomRole: Role | null;
   /** Permission list from the API, when it sends one. Overrides the local table. */
   permissions: string[] | null;
@@ -82,7 +82,10 @@ export const useAuthStore = create<AuthState>()(
         fullName: state.fullName,
         countryCode: state.countryCode,
         phoneNumber: state.phoneNumber,
+        canEnterApp: state.canEnterApp,
         primaryShowroomId: state.primaryShowroomId,
+        primaryShowroomRole: state.primaryShowroomRole,
+        permissions: state.permissions,
       }),
     }
   )

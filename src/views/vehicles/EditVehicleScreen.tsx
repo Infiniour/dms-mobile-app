@@ -24,6 +24,7 @@ import {
 import { collectImagesWithLabels, type ApiVehicleDetail } from './apiMapper';
 import {
   fuelTypeOptions,
+  indianStateOptions,
   transmissionTypeOptions,
   vehicleTypeOptions,
   yearOfManufactureOptions,
@@ -355,23 +356,19 @@ export function EditVehicleScreen({ vehicleId }: EditVehicleScreenProps) {
 
             <View style={formFieldStyles.fieldRow}>
               <View style={formFieldStyles.fieldColumn}>
-                <FieldLabel label="Vehicle type" />
                 <SelectField
                   label="Vehicle type"
                   value={form.vehicleType}
                   options={vehicleTypeOptions}
                   onChange={(value) => updateField('vehicleType', value)}
-                  placeholder="Select type"
                 />
               </View>
               <View style={formFieldStyles.fieldColumn}>
-                <FieldLabel label="Fuel type" />
                 <SelectField
                   label="Fuel type"
                   value={form.fuelType}
                   options={fuelTypeOptions}
                   onChange={(value) => updateField('fuelType', value)}
-                  placeholder="Select fuel"
                 />
               </View>
             </View>
@@ -416,13 +413,11 @@ export function EditVehicleScreen({ vehicleId }: EditVehicleScreenProps) {
 
             <View style={formFieldStyles.fieldRow}>
               <View style={formFieldStyles.fieldColumn}>
-                <FieldLabel label="Year" />
                 <SelectField
                   label="Year of manufacture"
                   value={form.yearOfManufacture}
                   options={yearOfManufactureOptions}
                   onChange={(value) => updateField('yearOfManufacture', value)}
-                  placeholder="Select year"
                 />
               </View>
               <View style={formFieldStyles.fieldColumn}>
@@ -449,11 +444,12 @@ export function EditVehicleScreen({ vehicleId }: EditVehicleScreenProps) {
                 />
               </View>
               <View style={formFieldStyles.fieldColumn}>
-                <FieldLabel label="Registration State" />
-                <FormTextInput
+                <SelectField
+                  label="Registration State"
                   value={form.registrationState}
-                  onChangeText={(value) => updateField('registrationState', value)}
-                  placeholder="Assam"
+                  options={indianStateOptions}
+                  onChange={(value) => updateField('registrationState', value)}
+                  searchable
                 />
               </View>
             </View>
@@ -469,13 +465,11 @@ export function EditVehicleScreen({ vehicleId }: EditVehicleScreenProps) {
             </View>
 
             <View style={formFieldStyles.fieldGroup}>
-              <FieldLabel label="Transmission type" />
               <SelectField
                 label="Transmission type"
                 value={form.transmissionType}
                 options={transmissionTypeOptions}
                 onChange={(value) => updateField('transmissionType', value)}
-                placeholder="Select transmission"
               />
             </View>
 

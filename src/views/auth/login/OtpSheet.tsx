@@ -89,11 +89,12 @@ export function OtpSheet({
       const response = await verifyOtp({ requestId, otpCode: otp });
       const data = response?.data ?? response;
 
-      if (data?.accessToken && data?.refreshToken) {
-        await setTokens(data);
+      if (!data?.accessToken || !data?.refreshToken) {
+        throw new Error('Verification succeeded but no session was returned. Please try again.');
       }
 
-      onVerify(data ?? {});
+      await setTokens(data);
+      onVerify(data);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to verify OTP.');
     } finally {

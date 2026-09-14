@@ -6,7 +6,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
@@ -15,20 +14,34 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { BottomSheet, Button, ShowroomPickerModal, type ShowroomRole } from '@/components/ui';
+import { BottomSheet, Button, FloatingField, ShowroomPickerModal, type ShowroomRole } from '@/components/ui';
 import { FontFamily, Grid, Typography } from '@/constants/theme';
+import { useLogout } from '@/hooks/useLogout';
 import { useTheme } from '@/hooks/useTheme';
 import { normalizeRole } from '@/permissions';
-import { assignShowroom, createShowroom, createVehicle, getProfile, uploadVehicleImage } from '@/services';
+import {
+  addVehicleDocument,
+  addVehicleExpense,
+  assignShowroom,
+  createShowroom,
+  createVehicle,
+  getProfile,
+  updateVehiclePricing,
+  uploadVehicleImage,
+} from '@/services';
 import { useAuthStore } from '@/store';
 import {
+  expenseCategoryOptions,
   fuelTypeOptions,
+  indianStateOptions,
   transmissionTypeOptions,
   vehicleTypeOptions,
   yearOfManufactureOptions,
+  type ExpenseType,
 } from '@/views/vehicles/data';
 import { SelectField } from '@/views/vehicles/components/VehicleFormFields';
 import { VehiclePhotosPicker, type VehiclePhoto } from '@/views/vehicles/components/VehiclePhotosPicker';
+import { DOCUMENT_SLOTS, type DocumentType } from '@/views/vehicles/documents';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 type SetupStep = 'welcome' | 'showroom' | 'vehicle' | 'done';
@@ -62,6 +75,9 @@ type VehicleForm = {
   usageKm: string;
   fuelType: string;
   transmissionType: string;
+  /** Both optional — pricing is a separate API call attempted after the vehicle exists, not required to continue setup. */
+  buyingPrice: string;
+  askingPrice: string;
 };
 
 const tabs = [
@@ -85,11 +101,19 @@ function createDefaultVehicleForm(): VehicleForm {
     usageKm: '',
     fuelType: '',
     transmissionType: '',
-    registrationNumber: generateRegistrationNumber(),
+    registrationNumber: '',
+    buyingPrice: '',
+    askingPrice: '',
   };
 }
 
-function generateRegistrationNumber() {
+// Dev-only test data — never referenced outside a __DEV__ branch, so it
+// cannot end up filling a form in a production build.
+function randomInt(max: number) {
+  return Math.floor(Math.random() * max);
+}
+
+function generateSampleRegistrationNumber() {
   const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
   const series = `${letters[randomInt(letters.length)]}${letters[randomInt(letters.length)]}`;
   const number = String(randomInt(9000) + 1000);
@@ -97,13 +121,41 @@ function generateRegistrationNumber() {
   return `AS01${series}${number}`;
 }
 
-function randomInt(max: number) {
-  return Math.floor(Math.random() * max);
-}
+const SAMPLE_SHOWROOMS = [
+  {
+    showroomName: 'Metro Motors',
+    address: '12 MG Road',
+    city: 'Bengaluru',
+    state: 'Karnataka',
+    pincode: '560001',
+  },
+  {
+    showroomName: 'City Auto Hub',
+    address: '45 Anna Salai',
+    city: 'Chennai',
+    state: 'Tamil Nadu',
+    pincode: '600002',
+  },
+  {
+    showroomName: 'Highway Cars',
+    address: '8 Residency Road',
+    city: 'Guwahati',
+    state: 'Assam',
+    pincode: '781001',
+  },
+];
+
+const SAMPLE_VEHICLES = [
+  { manufacturer: 'Toyota', model: 'Camry', variant: 'LE', color: 'Black', vehicleType: 'car', fuelType: 'petrol' },
+  { manufacturer: 'Honda', model: 'City', variant: 'V', color: 'White', vehicleType: 'car', fuelType: 'petrol' },
+  { manufacturer: 'Hyundai', model: 'Creta', variant: 'SX', color: 'Blue', vehicleType: 'car', fuelType: 'diesel' },
+  { manufacturer: 'Hero', model: 'Splendor', variant: 'Plus', color: 'Red', vehicleType: 'bike', fuelType: 'petrol' },
+];
 
 export function WelcomeSetupScreen() {
   const { colors } = useTheme();
   const router = useRouter();
+  const { isLoggingOut, logout } = useLogout();
   const params = useLocalSearchParams<{ step?: string }>();
   const fullName = useAuthStore((s) => s.fullName);
   const countryCode = useAuthStore((s) => s.countryCode);
@@ -132,10 +184,17 @@ export function WelcomeSetupScreen() {
   const [isCheckingNextStep, setIsCheckingNextStep] = useState(false);
   const [logoImage, setLogoImage] = useState<PickedImage | null>(null);
   const [bannerImage, setBannerImage] = useState<PickedImage | null>(null);
-  const [photoPickerTarget, setPhotoPickerTarget] = useState<'logo' | 'banner' | null>(null);
+  const [photoPickerTarget, setPhotoPickerTarget] = useState<'logo' | 'banner' | DocumentType | null>(
+    null
+  );
   const [vehicleNumber, setVehicleNumber] = useState('');
   const [vehicleForm, setVehicleForm] = useState<VehicleForm>(() => createDefaultVehicleForm());
   const [vehiclePhotos, setVehiclePhotos] = useState<VehiclePhoto[]>([]);
+  const [documentFiles, setDocumentFiles] = useState<Partial<Record<DocumentType, PickedImage>>>({});
+  const [expenseType, setExpenseType] = useState<ExpenseType>('repair');
+  const [expenseAmount, setExpenseAmount] = useState('');
+  const [expensePaidTo, setExpensePaidTo] = useState('');
+  const [expenseDescription, setExpenseDescription] = useState('');
   const [pendingVehicleId, setPendingVehicleId] = useState<number | null>(null);
   const [showroomOptions, setShowroomOptions] = useState<ShowroomRole[]>([]);
   const hasShowroomSelection = Boolean(pendingVehicleId && showroomOptions.length > 1);
@@ -169,7 +228,10 @@ export function WelcomeSetupScreen() {
     return () => clearTimeout(timer);
   }, [completeProfile, fullName, router, setCanEnterApp, step]);
 
-  const applyPickedImage = (target: 'logo' | 'banner', asset: ImagePicker.ImagePickerAsset) => {
+  const applyPickedImage = (
+    target: 'logo' | 'banner' | DocumentType,
+    asset: ImagePicker.ImagePickerAsset
+  ) => {
     const image = {
       uri: asset.uri,
       name: asset.fileName,
@@ -181,23 +243,28 @@ export function WelcomeSetupScreen() {
       return;
     }
 
-    setLogoImage(image);
+    if (target === 'logo') {
+      setLogoImage(image);
+      return;
+    }
+
+    setDocumentFiles((current) => ({ ...current, [target]: image }));
   };
 
-  const handleTakePhoto = async (target: 'logo' | 'banner') => {
+  const handleTakePhoto = async (target: 'logo' | 'banner' | DocumentType) => {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
 
     if (!permission.granted) {
       Alert.alert(
         'Camera access needed',
-        'Please allow camera access to take a showroom photo.'
+        'Please allow camera access to take a photo.'
       );
       return;
     }
 
     const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
-      aspect: target === 'banner' ? [16, 6] : [1, 1],
+      allowsEditing: target === 'logo' || target === 'banner',
+      aspect: target === 'banner' ? [16, 6] : target === 'logo' ? [1, 1] : undefined,
       quality: 0.85,
     });
 
@@ -208,21 +275,21 @@ export function WelcomeSetupScreen() {
     applyPickedImage(target, result.assets[0]);
   };
 
-  const handleChooseFromLibrary = async (target: 'logo' | 'banner') => {
+  const handleChooseFromLibrary = async (target: 'logo' | 'banner' | DocumentType) => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permission.granted) {
       Alert.alert(
         'Photo access needed',
-        'Please allow photo access to select a showroom image.'
+        'Please allow photo access to select a photo.'
       );
       return;
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: target === 'banner' ? [16, 6] : [1, 1],
+      allowsEditing: target === 'logo' || target === 'banner',
+      aspect: target === 'banner' ? [16, 6] : target === 'logo' ? [1, 1] : undefined,
       quality: 0.85,
     });
 
@@ -233,7 +300,7 @@ export function WelcomeSetupScreen() {
     applyPickedImage(target, result.assets[0]);
   };
 
-  const handlePickImage = (target: 'logo' | 'banner') => {
+  const handlePickImage = (target: 'logo' | 'banner' | DocumentType) => {
     setPhotoPickerTarget(target);
   };
 
@@ -317,6 +384,43 @@ export function WelcomeSetupScreen() {
     }));
   };
 
+  // Dev-only shortcuts for exercising these forms repeatedly while testing —
+  // the button that calls these only renders when __DEV__ is true.
+  const handleFillTestShowroom = () => {
+    const sample = SAMPLE_SHOWROOMS[randomInt(SAMPLE_SHOWROOMS.length)];
+
+    setShowroomName(sample.showroomName);
+    setAddress(sample.address);
+    setCity(sample.city);
+    setShowroomState(sample.state);
+    setPincode(sample.pincode);
+  };
+
+  const handleFillTestVehicle = () => {
+    const sample = SAMPLE_VEHICLES[randomInt(SAMPLE_VEHICLES.length)];
+
+    setVehicleForm({
+      vehicleType: sample.vehicleType,
+      manufacturer: sample.manufacturer,
+      model: sample.model,
+      variant: sample.variant,
+      color: sample.color,
+      yearOfManufacture: String(2018 + randomInt(6)),
+      rtoCode: 'KA-01',
+      registrationNumber: generateSampleRegistrationNumber(),
+      registrationState: 'Karnataka',
+      usageKm: String(10000 + randomInt(40000)),
+      fuelType: sample.fuelType,
+      transmissionType: randomInt(2) === 0 ? 'manual' : 'automatic',
+      buyingPrice: String(150000 + randomInt(300000)),
+      askingPrice: String(200000 + randomInt(400000)),
+    });
+    setExpenseType('service');
+    setExpenseAmount(String(500 + randomInt(3000)));
+    setExpensePaidTo('City Motors');
+    setExpenseDescription('Routine service before listing');
+  };
+
   const fetchProfileForNextStep = async () => {
     const response = await getProfile();
     const profile = (response as unknown as ProfileResponse).data;
@@ -378,6 +482,15 @@ export function WelcomeSetupScreen() {
 
       if (__DEV__) {
         console.log('Assign vehicle showroom response', responseBody);
+      }
+
+      // Pricing/documents/expense all require showroom membership on the
+      // vehicle server-side — they 404 if attempted before this assignment,
+      // so they can only run now that the vehicle actually belongs to a showroom.
+      const warnings = await applyOptionalVehicleExtras(vehicleId);
+
+      if (warnings.length > 0) {
+        Alert.alert('Some details need another look', warnings.join('\n\n'));
       }
 
       if (vehiclePhotos.length > 0) {
@@ -482,6 +595,77 @@ export function WelcomeSetupScreen() {
     }
   };
 
+  // Pricing, documents, and the initial expense are all optional and each hit
+  // a different endpoint than vehicle creation itself. None of them should be
+  // able to strand onboarding — the vehicle already exists by the time these
+  // run, so a failure here is reported back as a warning (with a pointer to
+  // where it can be finished later) rather than blocking the Done step.
+  const applyOptionalVehicleExtras = async (vehicleId: number): Promise<string[]> => {
+    const warnings: string[] = [];
+    const buyingPriceValue = Number(vehicleForm.buyingPrice);
+    const askingPriceValue = Number(vehicleForm.askingPrice);
+
+    if (vehicleForm.buyingPrice.trim() && vehicleForm.askingPrice.trim()) {
+      try {
+        const now = new Date();
+
+        await updateVehiclePricing({
+          vehicleId,
+          buyingPrice: buyingPriceValue,
+          buyingDate: now.toISOString().slice(0, 10),
+          priceTag: askingPriceValue,
+          taggedAt: now.toISOString(),
+          currency: 'inr',
+          remarks: undefined,
+        });
+      } catch {
+        warnings.push("Price wasn't set — you can add it later from the vehicle's Edit page.");
+      }
+    }
+
+    const pendingDocuments = DOCUMENT_SLOTS.filter((slot) => documentFiles[slot.type]);
+
+    if (pendingDocuments.length > 0) {
+      const results = await Promise.allSettled(
+        pendingDocuments.map((slot) => {
+          const file = documentFiles[slot.type];
+
+          return addVehicleDocument(vehicleId, {
+            documentType: slot.type,
+            file: { uri: file!.uri, name: file!.name ?? undefined, type: file!.type ?? undefined },
+          });
+        })
+      );
+
+      const failedCount = results.filter((result) => result.status === 'rejected').length;
+
+      if (failedCount > 0) {
+        warnings.push(
+          `${failedCount} of ${pendingDocuments.length} document${pendingDocuments.length === 1 ? '' : 's'} couldn't be uploaded — add ${failedCount === 1 ? 'it' : 'them'} later from the vehicle's Documents page.`
+        );
+      }
+    }
+
+    const expenseAmountValue = Number(expenseAmount.replace(/\D/g, ''));
+
+    if (expenseAmountValue > 0) {
+      try {
+        await addVehicleExpense({
+          vehicleId,
+          type: expenseType,
+          amount: expenseAmountValue,
+          paidTo: expensePaidTo.trim(),
+          description: expenseDescription.trim(),
+          date: new Date().toISOString(),
+        });
+      } catch {
+        warnings.push("Expense wasn't saved — you can add it later from the vehicle's Expenses page.");
+      }
+    }
+
+    return warnings;
+  };
+
   const handleCreateVehicle = async () => {
     if (isCreatingVehicle) {
       return;
@@ -528,6 +712,13 @@ export function WelcomeSetupScreen() {
     }
   };
 
+  const handleLogout = () => {
+    Alert.alert('Log out?', 'You can finish setting up your dealership later.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Log Out', style: 'destructive', onPress: logout },
+    ]);
+  };
+
   const handlePrimaryAction = async () => {
     if (step === 'welcome' && !showroomComplete) {
       setStep('showroom');
@@ -563,7 +754,28 @@ export function WelcomeSetupScreen() {
         behavior="padding"
         keyboardVerticalOffset={8}>
         <View style={styles.content}>
-          <StepTabs activeTab={activeTab} showroomComplete={showroomComplete} vehicleComplete={vehicleComplete} />
+          <View style={styles.topBar}>
+            <View style={styles.tabsFlex}>
+              <StepTabs
+                activeTab={activeTab}
+                showroomComplete={showroomComplete}
+                vehicleComplete={vehicleComplete}
+              />
+            </View>
+            <Pressable
+              onPress={handleLogout}
+              disabled={isLoggingOut}
+              hitSlop={8}
+              style={({ pressed }) => [
+                styles.logoutButton,
+                {
+                  borderColor: colors.outline,
+                  opacity: pressed || isLoggingOut ? 0.6 : 1,
+                },
+              ]}>
+              <Ionicons name="log-out-outline" size={16} color={colors['on-surface-variant']} />
+            </Pressable>
+          </View>
 
           <ScrollView
             key={step}
@@ -587,8 +799,6 @@ export function WelcomeSetupScreen() {
                 city={city}
                 showroomState={showroomState}
                 pincode={pincode}
-                latitude={latitude}
-                longitude={longitude}
                 phoneNumber={readonlyPhoneNumber}
                 logoImageUri={logoImage?.uri}
                 bannerImageUri={bannerImage?.uri}
@@ -599,11 +809,10 @@ export function WelcomeSetupScreen() {
                 onCityChange={setCity}
                 onShowroomStateChange={setShowroomState}
                 onPincodeChange={setPincode}
-                onLatitudeChange={setLatitude}
-                onLongitudeChange={setLongitude}
                 onPickLogo={() => handlePickImage('logo')}
                 onPickBanner={() => handlePickImage('banner')}
                 onLocationPress={handleUseCurrentLocation}
+                onFillTestData={__DEV__ ? handleFillTestShowroom : undefined}
               />
             ) : null}
 
@@ -613,6 +822,24 @@ export function WelcomeSetupScreen() {
                 onFieldChange={updateVehicleField}
                 photos={vehiclePhotos}
                 onPhotosChange={setVehiclePhotos}
+                onFillTestData={__DEV__ ? handleFillTestVehicle : undefined}
+                documentFiles={documentFiles}
+                onPickDocument={handlePickImage}
+                onRemoveDocument={(type) =>
+                  setDocumentFiles((current) => {
+                    const next = { ...current };
+                    delete next[type];
+                    return next;
+                  })
+                }
+                expenseType={expenseType}
+                onExpenseTypeChange={setExpenseType}
+                expenseAmount={expenseAmount}
+                onExpenseAmountChange={setExpenseAmount}
+                expensePaidTo={expensePaidTo}
+                onExpensePaidToChange={setExpensePaidTo}
+                expenseDescription={expenseDescription}
+                onExpenseDescriptionChange={setExpenseDescription}
               />
             ) : null}
 
@@ -868,37 +1095,58 @@ function StepTabs({
   const activeIndex = tabs.indexOf(activeTab);
   const completeIndex =
     vehicleComplete ? 3 : activeTab === 'Vehicle' ? 2 : showroomComplete ? 1 : activeIndex;
+  // The line sits behind the circles as one continuous bar rather than a
+  // per-segment connector, so circles land exactly evenly spaced (and
+  // centered under their labels) regardless of how many steps there are.
+  const halfItemInset = `${100 / (tabs.length * 2)}%` as const;
+  const fillFraction = Math.min(Math.max(completeIndex / (tabs.length - 1), 0), 1);
 
   return (
-    <View style={styles.tabsWrap}>
-      <View style={[styles.progressTrack, { backgroundColor: colors['surface-container'] }]}>
+    <View style={styles.stepperWrap}>
+      <View
+        style={[
+          styles.stepperTrack,
+          { left: halfItemInset, right: halfItemInset, backgroundColor: colors['surface-container'] },
+        ]}>
         <View
           style={[
-            styles.progressFill,
-            {
-              backgroundColor: colors.primary,
-              width: `${Math.max(((completeIndex + 1) / tabs.length) * 100, 22)}%`,
-            },
+            styles.stepperTrackFill,
+            { width: `${fillFraction * 100}%`, backgroundColor: colors.primary },
           ]}
         />
       </View>
-      <View style={styles.tabLabels}>
-        {tabs.map((tab) => {
-          const active = tab === activeTab;
+
+      <View style={styles.stepperRow}>
+        {tabs.map((tab, index) => {
+          const isComplete = index < completeIndex;
+          const isActive = tab === activeTab;
+          const circleBackground = isComplete || isActive ? colors.primary : colors['surface-container'];
+          const circleContentColor = isComplete || isActive ? colors['on-primary'] : colors['on-surface-variant'];
 
           return (
-            <Text
-              key={tab}
-              style={[
-                Typography.micro,
-                styles.tabLabel,
-                {
-                  color: active ? colors.primary : colors['on-surface-variant'],
-                  fontFamily: active ? Typography.screenTitle.fontFamily : FontFamily.medium,
-                },
-              ]}>
-              {tab}
-            </Text>
+            <View key={tab} style={styles.stepItem}>
+              <View style={[styles.stepCircle, { backgroundColor: circleBackground }]}>
+                {isComplete ? (
+                  <Ionicons name="checkmark" size={13} color={circleContentColor} />
+                ) : (
+                  <Text style={[Typography.micro, styles.stepNumber, { color: circleContentColor }]}>
+                    {index + 1}
+                  </Text>
+                )}
+              </View>
+              <Text
+                numberOfLines={1}
+                style={[
+                  Typography.micro,
+                  styles.stepLabel,
+                  {
+                    color: isActive ? colors.primary : colors['on-surface-variant'],
+                    fontFamily: isActive ? Typography.screenTitle.fontFamily : FontFamily.medium,
+                  },
+                ]}>
+                {tab}
+              </Text>
+            </View>
           );
         })}
       </View>
@@ -946,15 +1194,6 @@ function WelcomePart({
           onPress={onVehiclePress}
         />
       </View>
-
-      {!showroomComplete ? (
-        <View style={[styles.warningBox, { borderColor: colors.error }]}>
-          <Ionicons name="alert-circle-outline" size={16} color={colors.error} />
-          <Text style={[Typography.caption, styles.warningText, { color: colors.error }]}>
-            You'll need to add your showroom first before you can register vehicles to it.
-          </Text>
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -1098,8 +1337,6 @@ function ShowroomPart({
   city,
   showroomState,
   pincode,
-  latitude,
-  longitude,
   phoneNumber,
   logoImageUri,
   bannerImageUri,
@@ -1110,19 +1347,16 @@ function ShowroomPart({
   onCityChange,
   onShowroomStateChange,
   onPincodeChange,
-  onLatitudeChange,
-  onLongitudeChange,
   onPickLogo,
   onPickBanner,
   onLocationPress,
+  onFillTestData,
 }: {
   showroomName: string;
   address: string;
   city: string;
   showroomState: string;
   pincode: string;
-  latitude: string;
-  longitude: string;
   phoneNumber: string;
   logoImageUri?: string;
   bannerImageUri?: string;
@@ -1133,21 +1367,17 @@ function ShowroomPart({
   onCityChange: (value: string) => void;
   onShowroomStateChange: (value: string) => void;
   onPincodeChange: (value: string) => void;
-  onLatitudeChange: (value: string) => void;
-  onLongitudeChange: (value: string) => void;
   onPickLogo: () => void;
   onPickBanner: () => void;
   onLocationPress: () => void;
+  /** Dev builds only — the parent only passes this when __DEV__ is true. */
+  onFillTestData?: () => void;
 }) {
   const { colors } = useTheme();
 
   return (
     <View style={styles.formPart}>
-      <View style={[styles.stepBadge, { backgroundColor: colors['surface-container'] }]}>
-        <Text style={[Typography.screenTitle, styles.stepBadgeText, { color: colors.primary }]}>
-          Step 2 of 3
-        </Text>
-      </View>
+      {onFillTestData ? <DevFillButton onPress={onFillTestData} /> : null}
 
       <View style={styles.formHeader}>
         <Text style={[Typography.hero2, styles.formTitle, { color: colors['on-background'] }]}>
@@ -1166,96 +1396,68 @@ function ShowroomPart({
       />
 
       <View style={styles.formFields}>
-        <View style={styles.fieldGroup}>
-          <FieldLabel label="Showroom name" />
-          <IconTextInput
-            icon="storefront-outline"
-            value={showroomName}
-            onChangeText={onShowroomNameChange}
-            placeholder="Showroom name"
+        <FloatingField
+          label="Showroom name"
+          icon="storefront-outline"
+          value={showroomName}
+          onChangeText={onShowroomNameChange}
+        />
+
+        {/* Up front, before the address fields it fills in — tapping this is
+            meant to replace typing the address by hand, not follow it. Raw
+            lat/long values aren't shown anywhere: nothing a showroom owner
+            would do with those numbers, they only matter to the map pin. */}
+        <Pressable
+          onPress={onLocationPress}
+          disabled={isFetchingLocation}
+          style={({ pressed }) => [
+            styles.locationButton,
+            {
+              borderColor: locationPinned ? colors.primary : colors.outline,
+              backgroundColor: locationPinned ? colors['primary-container'] : colors.background,
+              opacity: pressed || isFetchingLocation ? 0.75 : 1,
+            },
+          ]}>
+          <Ionicons
+            name={isFetchingLocation ? 'sync-outline' : locationPinned ? 'checkmark-circle' : 'location-outline'}
+            size={20}
+            color={colors.primary}
           />
+          <Text style={[Typography.body, styles.locationButtonText, { color: colors.primary }]}>
+            {isFetchingLocation
+              ? 'Fetching your location...'
+              : locationPinned
+                ? 'Location pinned — tap to refresh'
+                : 'Use current location'}
+          </Text>
+          {!isFetchingLocation ? (
+            <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+          ) : null}
+        </Pressable>
+
+        <FloatingField label="Address" value={address} onChangeText={onAddressChange} />
+
+        <View style={styles.fieldRow}>
+          <View style={styles.fieldColumn}>
+            <FloatingField label="City" value={city} onChangeText={onCityChange} />
+          </View>
+          <View style={styles.fieldColumn}>
+            <FloatingField label="State" value={showroomState} onChangeText={onShowroomStateChange} />
+          </View>
         </View>
+
+        <FloatingField
+          label="Pincode"
+          value={pincode}
+          onChangeText={(value) => onPincodeChange(value.replace(/\D/g, '').slice(0, 6))}
+          keyboardType="number-pad"
+          maxLength={6}
+        />
 
         <View style={styles.fieldGroup}>
           <FieldLabel label="Phone number" />
           <ReadonlyField value={phoneNumber || 'Phone number'} />
         </View>
-
-        <View style={styles.fieldGroup}>
-          <FieldLabel label="Address" />
-          <FormTextInput
-            value={address}
-            onChangeText={onAddressChange}
-            placeholder="Street address"
-          />
-        </View>
-
-        <View style={styles.fieldRow}>
-          <View style={styles.fieldColumn}>
-            <FieldLabel label="City" />
-            <FormTextInput value={city} onChangeText={onCityChange} placeholder="City" />
-          </View>
-          <View style={styles.fieldColumn}>
-            <FieldLabel label="State" />
-            <FormTextInput value={showroomState} onChangeText={onShowroomStateChange} placeholder="State" />
-          </View>
-        </View>
-
-        <View style={styles.fieldRow}>
-          <View style={styles.fieldColumn}>
-            <FieldLabel label="Pincode" />
-            <FormTextInput
-              value={pincode}
-              onChangeText={(value) => onPincodeChange(value.replace(/\D/g, '').slice(0, 6))}
-              placeholder="Pincode"
-              keyboardType="number-pad"
-              maxLength={6}
-            />
-          </View>
-          <View style={styles.fieldColumn}>
-            <FieldLabel label="Latitude" />
-            <FormTextInput
-              value={latitude}
-              onChangeText={onLatitudeChange}
-              placeholder="26.1445"
-              keyboardType="decimal-pad"
-            />
-          </View>
-        </View>
-
-        <View style={styles.fieldGroup}>
-          <FieldLabel label="Longitude" />
-          <FormTextInput
-            value={longitude}
-            onChangeText={onLongitudeChange}
-            placeholder="91.7362"
-            keyboardType="decimal-pad"
-          />
-        </View>
-
-        <Pressable
-          onPress={onLocationPress}
-          disabled={isFetchingLocation}
-          style={[
-            styles.locationMiniCard,
-            {
-              backgroundColor: colors['surface-container'],
-              opacity: isFetchingLocation ? 0.75 : 1,
-            },
-          ]}>
-          <Ionicons
-            name={isFetchingLocation ? 'sync-outline' : 'location'}
-            size={22}
-            color={colors.primary}
-          />
-          <Text style={[Typography.caption, styles.locationText, { color: colors.primary }]}>
-            {isFetchingLocation
-              ? 'Fetching location...'
-              : locationPinned
-                ? 'Location pinned'
-                : 'Use current location'}
-          </Text>
-        </Pressable>
       </View>
     </View>
   );
@@ -1315,162 +1517,350 @@ function VehiclePart({
   onFieldChange,
   photos,
   onPhotosChange,
+  documentFiles,
+  onPickDocument,
+  onRemoveDocument,
+  expenseType,
+  onExpenseTypeChange,
+  expenseAmount,
+  onExpenseAmountChange,
+  expensePaidTo,
+  onExpensePaidToChange,
+  expenseDescription,
+  onExpenseDescriptionChange,
+  onFillTestData,
 }: {
   form: VehicleForm;
   onFieldChange: (field: keyof VehicleForm, value: string) => void;
   photos: VehiclePhoto[];
   onPhotosChange: (photos: VehiclePhoto[]) => void;
+  documentFiles: Partial<Record<DocumentType, PickedImage>>;
+  onPickDocument: (type: DocumentType) => void;
+  onRemoveDocument: (type: DocumentType) => void;
+  expenseType: ExpenseType;
+  onExpenseTypeChange: (type: ExpenseType) => void;
+  expenseAmount: string;
+  onExpenseAmountChange: (value: string) => void;
+  expensePaidTo: string;
+  onExpensePaidToChange: (value: string) => void;
+  expenseDescription: string;
+  onExpenseDescriptionChange: (value: string) => void;
+  /** Dev builds only — the parent only passes this when __DEV__ is true. */
+  onFillTestData?: () => void;
 }) {
   const { colors } = useTheme();
 
   return (
     <View style={styles.formPart}>
-      <View style={[styles.stepBadge, { backgroundColor: colors['surface-container'] }]}>
-        <Text style={[Typography.screenTitle, styles.stepBadgeText, { color: colors.primary }]}>
-          Step 3 of 3
-        </Text>
-      </View>
+      {onFillTestData ? <DevFillButton onPress={onFillTestData} /> : null}
 
       <View style={styles.formHeader}>
         <Text style={[Typography.hero2, styles.formTitle, { color: colors['on-background'] }]}>
           Add your first{'\n'}vehicle
         </Text>
         <Text style={[Typography.body, styles.formSubtitle, { color: colors['on-surface'] }]}>
-          Add basic inventory details. We need these fields for the create vehicle API.
+          Enter the vehicle's details below to add it to your inventory.
         </Text>
       </View>
 
-      <View style={styles.fieldGroup}>
-        <FieldLabel label="Photos" />
+      <View style={[styles.fieldGroup, styles.photosGroup]}>
+        <View style={styles.labelRow}>
+          <FieldLabel label="Photos" />
+          <View style={[styles.optionalPill, { backgroundColor: colors['surface-container-high'] }]}>
+            <Text style={[Typography.micro, styles.optionalText, { color: colors.primary }]}>
+              Optional
+            </Text>
+          </View>
+        </View>
         <VehiclePhotosPicker photos={photos} onChange={onPhotosChange} />
       </View>
 
       <View style={styles.formFields}>
+        {/* The plate is how this vehicle gets identified everywhere else in
+            the app, so it leads the form instead of being buried after
+            categorization fields nobody looks at first. */}
+        <FloatingField
+          label="Registration number"
+          value={form.registrationNumber}
+          onChangeText={(value) => onFieldChange('registrationNumber', value)}
+          autoCapitalize="characters"
+        />
+
         <View style={styles.fieldRow}>
           <View style={styles.fieldColumn}>
-            <FieldLabel label="Vehicle type" />
+            <FloatingField
+              label="Manufacturer"
+              value={form.manufacturer}
+              onChangeText={(value) => onFieldChange('manufacturer', value)}
+            />
+          </View>
+          <View style={styles.fieldColumn}>
+            <FloatingField
+              label="Model"
+              value={form.model}
+              onChangeText={(value) => onFieldChange('model', value)}
+            />
+          </View>
+        </View>
+
+        <View style={styles.fieldRow}>
+          <View style={styles.fieldColumn}>
+            <FloatingField
+              label="Variant"
+              value={form.variant}
+              onChangeText={(value) => onFieldChange('variant', value)}
+            />
+          </View>
+          <View style={styles.fieldColumn}>
+            <FloatingField
+              label="Color"
+              value={form.color}
+              onChangeText={(value) => onFieldChange('color', value)}
+            />
+          </View>
+        </View>
+
+        <View style={styles.fieldRow}>
+          <View style={styles.fieldColumn}>
             <SelectField
               label="Vehicle type"
               value={form.vehicleType}
               options={vehicleTypeOptions}
               onChange={(value) => onFieldChange('vehicleType', value)}
-              placeholder="Select type"
             />
           </View>
           <View style={styles.fieldColumn}>
-            <FieldLabel label="Fuel type" />
             <SelectField
               label="Fuel type"
               value={form.fuelType}
               options={fuelTypeOptions}
               onChange={(value) => onFieldChange('fuelType', value)}
-              placeholder="Select fuel"
             />
           </View>
         </View>
 
         <View style={styles.fieldRow}>
           <View style={styles.fieldColumn}>
-            <FieldLabel label="Manufacturer" />
-            <FormTextInput
-              value={form.manufacturer}
-              onChangeText={(value) => onFieldChange('manufacturer', value)}
-              placeholder="Toyota"
+            <SelectField
+              label="Transmission type"
+              value={form.transmissionType}
+              options={transmissionTypeOptions}
+              onChange={(value) => onFieldChange('transmissionType', value)}
             />
           </View>
           <View style={styles.fieldColumn}>
-            <FieldLabel label="Model" />
-            <FormTextInput
-              value={form.model}
-              onChangeText={(value) => onFieldChange('model', value)}
-              placeholder="Camry"
-            />
-          </View>
-        </View>
-
-        <View style={styles.fieldRow}>
-          <View style={styles.fieldColumn}>
-            <FieldLabel label="Variant" />
-            <FormTextInput
-              value={form.variant}
-              onChangeText={(value) => onFieldChange('variant', value)}
-              placeholder="LE"
-            />
-          </View>
-          <View style={styles.fieldColumn}>
-            <FieldLabel label="Color" />
-            <FormTextInput
-              value={form.color}
-              onChangeText={(value) => onFieldChange('color', value)}
-              placeholder="Black"
-            />
-          </View>
-        </View>
-
-        <View style={styles.fieldRow}>
-          <View style={styles.fieldColumn}>
-            <FieldLabel label="Year" />
             <SelectField
               label="Year of manufacture"
               value={form.yearOfManufacture}
               options={yearOfManufactureOptions}
               onChange={(value) => onFieldChange('yearOfManufacture', value)}
-              placeholder="Select year"
-            />
-          </View>
-          <View style={styles.fieldColumn}>
-            <FieldLabel label="Usage KM" />
-            <FormTextInput
-              value={form.usageKm}
-              onChangeText={(value) => onFieldChange('usageKm', value)}
-              placeholder="50000"
-              keyboardType="number-pad"
             />
           </View>
         </View>
 
+        <FloatingField
+          label="Usage (KM)"
+          value={form.usageKm}
+          onChangeText={(value) => onFieldChange('usageKm', value)}
+          keyboardType="number-pad"
+        />
+
+        {/* Registration authority details — least essential to identifying the
+            vehicle day-to-day, so they close out the form instead of
+            interrupting the make/model/spec flow above. */}
         <View style={styles.fieldRow}>
           <View style={styles.fieldColumn}>
-            <FieldLabel label="RTO code" />
-            <FormTextInput
+            <FloatingField
+              label="RTO code"
               value={form.rtoCode}
               onChangeText={(value) => onFieldChange('rtoCode', value)}
-              placeholder="KA-01"
               autoCapitalize="characters"
             />
           </View>
           <View style={styles.fieldColumn}>
-            <FieldLabel label="Registration State" />
-            <FormTextInput
+            <SelectField
+              label="Registration State"
               value={form.registrationState}
-              onChangeText={(value) => onFieldChange('registrationState', value)}
-              placeholder="Karnataka"
+              options={indianStateOptions}
+              onChange={(value) => onFieldChange('registrationState', value)}
+              searchable
             />
           </View>
         </View>
 
-        <View style={styles.fieldGroup}>
-          <FieldLabel label="Registration number" />
-          <IconTextInput
-            icon="car-sport-outline"
-            value={form.registrationNumber}
-            onChangeText={(value) => onFieldChange('registrationNumber', value)}
-            placeholder="KA01AB1234"
-            autoCapitalize="characters"
-          />
-        </View>
-
-        <View style={styles.fieldGroup}>
-          <FieldLabel label="Transmission type" />
-          <SelectField
-            label="Transmission type"
-            value={form.transmissionType}
-            options={transmissionTypeOptions}
-            onChange={(value) => onFieldChange('transmissionType', value)}
-            placeholder="Select transmission"
-          />
+        {/* Pricing hits a separate API from vehicle creation, so it's kept
+            optional here — if it fails after the vehicle is created, that's
+            reported as a warning, not a reason to fail this whole step. */}
+        <View style={styles.fieldRow}>
+          <View style={styles.fieldColumn}>
+            <FloatingField
+              label="Buying price"
+              value={form.buyingPrice}
+              onChangeText={(value) => onFieldChange('buyingPrice', value.replace(/\D/g, ''))}
+              keyboardType="number-pad"
+            />
+          </View>
+          <View style={styles.fieldColumn}>
+            <FloatingField
+              label="Asking price"
+              value={form.askingPrice}
+              onChangeText={(value) => onFieldChange('askingPrice', value.replace(/\D/g, ''))}
+              keyboardType="number-pad"
+            />
+          </View>
         </View>
       </View>
+
+      <View style={[styles.fieldGroup, styles.sectionGroup]}>
+        <View style={styles.labelRow}>
+          <FieldLabel label="Documents" />
+          <OptionalBadge />
+        </View>
+        <View style={styles.documentList}>
+          {DOCUMENT_SLOTS.map((slot) => (
+            <DocumentRow
+              key={slot.type}
+              slot={slot}
+              file={documentFiles[slot.type]}
+              onAdd={() => onPickDocument(slot.type)}
+              onRemove={() => onRemoveDocument(slot.type)}
+            />
+          ))}
+        </View>
+      </View>
+
+      <View style={[styles.fieldGroup, styles.sectionGroup]}>
+        <View style={styles.labelRow}>
+          <FieldLabel label="Log an initial expense" />
+          <OptionalBadge />
+        </View>
+
+        <View style={styles.chips}>
+          {expenseCategoryOptions.map((category) => {
+            const selected = category.value === expenseType;
+
+            return (
+              <Pressable
+                key={category.value}
+                onPress={() => onExpenseTypeChange(category.value)}
+                style={({ pressed }) => [
+                  styles.chip,
+                  {
+                    backgroundColor: selected ? colors.primary : colors.background,
+                    borderColor: selected ? colors.primary : colors.outline,
+                    opacity: pressed ? 0.85 : 1,
+                  },
+                ]}>
+                <Text
+                  style={[
+                    Typography.caption,
+                    styles.chipLabel,
+                    { color: selected ? colors['on-primary'] : colors['on-surface'] },
+                  ]}>
+                  {category.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <View style={styles.fieldRow}>
+          <View style={styles.fieldColumn}>
+            <FloatingField
+              label="Amount"
+              value={expenseAmount}
+              onChangeText={(value) => onExpenseAmountChange(value.replace(/\D/g, ''))}
+              keyboardType="number-pad"
+            />
+          </View>
+          <View style={styles.fieldColumn}>
+            <FloatingField label="Paid to" value={expensePaidTo} onChangeText={onExpensePaidToChange} />
+          </View>
+        </View>
+
+        <FloatingField
+          label="Description"
+          value={expenseDescription}
+          onChangeText={onExpenseDescriptionChange}
+        />
+      </View>
+    </View>
+  );
+}
+
+function OptionalBadge() {
+  const { colors } = useTheme();
+
+  return (
+    <View style={[styles.optionalPill, { backgroundColor: colors['surface-container-high'] }]}>
+      <Text style={[Typography.micro, styles.optionalText, { color: colors.primary }]}>Optional</Text>
+    </View>
+  );
+}
+
+/** Dev-only shortcut to fill a form with plausible sample data while testing. */
+function DevFillButton({ onPress }: { onPress: () => void }) {
+  const { colors } = useTheme();
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.devFillButton,
+        { borderColor: colors.outline, opacity: pressed ? 0.7 : 1 },
+      ]}>
+      <Ionicons name="flask-outline" size={13} color={colors.primary} />
+      <Text style={[Typography.micro, styles.devFillText, { color: colors.primary }]}>
+        Fill test data
+      </Text>
+    </Pressable>
+  );
+}
+
+function DocumentRow({
+  slot,
+  file,
+  onAdd,
+  onRemove,
+}: {
+  slot: (typeof DOCUMENT_SLOTS)[number];
+  file?: PickedImage;
+  onAdd: () => void;
+  onRemove: () => void;
+}) {
+  const { colors } = useTheme();
+
+  return (
+    <View style={[styles.documentRow, { borderColor: colors.outline }]}>
+      <View style={[styles.documentIcon, { backgroundColor: colors['surface-container'] }]}>
+        {file ? (
+          <Image source={{ uri: file.uri }} style={styles.documentThumb} />
+        ) : (
+          <Ionicons name="document-text-outline" size={20} color={colors.primary} />
+        )}
+      </View>
+      <View style={styles.documentText}>
+        <Text style={[Typography.body, styles.documentLabel, { color: colors['on-surface'] }]} numberOfLines={1}>
+          {slot.label}
+        </Text>
+        <Text
+          style={[Typography.caption, styles.documentHint, { color: colors['on-surface-variant'] }]}
+          numberOfLines={1}>
+          {file ? 'Added' : slot.hint}
+        </Text>
+      </View>
+      {file ? (
+        <Pressable onPress={onRemove} hitSlop={8}>
+          <Ionicons name="close-circle" size={20} color={colors['on-surface-variant']} />
+        </Pressable>
+      ) : (
+        <Pressable
+          onPress={onAdd}
+          style={[styles.documentAdd, { borderColor: colors.primary }]}
+          hitSlop={8}>
+          <Ionicons name="add" size={16} color={colors.primary} />
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -1500,56 +1890,6 @@ function FieldLabel({ label }: { label: string }) {
     <Text style={[Typography.body, styles.fieldLabel, { color: colors['on-background'] }]}>
       {label}
     </Text>
-  );
-}
-
-function IconTextInput({
-  icon,
-  style,
-  ...inputProps
-}: React.ComponentProps<typeof TextInput> & { icon: IconName }) {
-  const { colors } = useTheme();
-
-  return (
-    <View style={[styles.inputWrap, { borderColor: colors.primary }]}>
-      <Ionicons name={icon} size={23} color={colors.primary} />
-      <TextInput
-        {...inputProps}
-        placeholderTextColor={colors['on-surface-variant']}
-        style={[
-          Typography.body,
-          styles.input,
-          {
-            color: colors['on-surface'],
-          },
-          style,
-        ]}
-      />
-    </View>
-  );
-}
-
-function FormTextInput({
-  style,
-  ...inputProps
-}: React.ComponentProps<typeof TextInput>) {
-  const { colors } = useTheme();
-
-  return (
-    <TextInput
-      {...inputProps}
-      placeholderTextColor={colors['on-surface-variant']}
-      style={[
-        Typography.body,
-        styles.formInput,
-        {
-          color: colors['on-surface'],
-          borderColor: colors.outline,
-          backgroundColor: colors.background,
-        },
-        style,
-      ]}
-    />
   );
 }
 
@@ -1594,28 +1934,60 @@ const styles = StyleSheet.create({
     paddingTop: 21,
     paddingBottom: 28,
   },
-  tabsWrap: {
-    paddingTop: 6,
-    gap: 13,
-  },
-  progressTrack: {
-    height: 10,
-    borderRadius: 20,
-    overflow: 'hidden',
-    marginHorizontal: 12,
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: 20,
-  },
-  tabLabels: {
+  topBar: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 12,
+    alignItems: 'flex-start',
+    gap: 12,
   },
-  tabLabel: {
-    fontSize: 13,
-    lineHeight: 16,
+  tabsFlex: {
+    flex: 1,
+  },
+  logoutButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 6,
+  },
+  stepperWrap: {
+    paddingTop: 6,
+    position: 'relative',
+  },
+  stepperTrack: {
+    position: 'absolute',
+    top: 6 + 13,
+    height: 2,
+    borderRadius: 1,
+  },
+  stepperTrackFill: {
+    height: '100%',
+    borderRadius: 1,
+  },
+  stepperRow: {
+    flexDirection: 'row',
+  },
+  stepItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  stepCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepNumber: {
+    fontSize: 12,
+    lineHeight: 14,
+    fontFamily: FontFamily.medium,
+  },
+  stepLabel: {
+    fontSize: 12,
+    lineHeight: 15,
+    marginTop: 8,
   },
   welcomePart: {
     gap: 24,
@@ -1623,6 +1995,7 @@ const styles = StyleSheet.create({
   },
   brandWrap: {
     minHeight: 184,
+    marginBottom: 16,
   },
   bannerUpload: {
     height: 132,
@@ -1750,35 +2123,22 @@ const styles = StyleSheet.create({
     width: 34,
     alignItems: 'center',
   },
-  warningBox: {
-    minHeight: 72,
-    borderRadius: 18,
-    borderWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 8,
-  },
-  warningText: {
-    flex: 1,
-    lineHeight: 17,
-  },
   formPart: {
     paddingTop: 2,
   },
-  stepBadge: {
-    alignSelf: 'flex-start',
-    borderRadius: 20,
-    paddingHorizontal: 15,
-    paddingVertical: 6,
-    marginLeft: 10,
-    marginBottom: 20,
+  devFillButton: {
+    flexDirection: 'row',
+    alignSelf: 'flex-end',
+    alignItems: 'center',
+    gap: 5,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    marginBottom: 8,
   },
-  stepBadgeText: {
-    fontSize: 15,
-    lineHeight: 18,
-    fontFamily: Typography.screenTitle.fontFamily,
+  devFillText: {
+    fontFamily: FontFamily.medium,
   },
   formHeader: {
     gap: 18,
@@ -1799,6 +2159,18 @@ const styles = StyleSheet.create({
   fieldGroup: {
     gap: 8,
   },
+  photosGroup: {
+    marginBottom: 20,
+  },
+  sectionGroup: {
+    marginTop: 24,
+    gap: 12,
+  },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   fieldRow: {
     flexDirection: 'row',
     gap: 16,
@@ -1807,20 +2179,67 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 8,
   },
+  documentList: {
+    gap: 10,
+  },
+  documentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  documentIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  documentThumb: {
+    width: '100%',
+    height: '100%',
+  },
+  documentText: {
+    flex: 1,
+    gap: 2,
+  },
+  documentLabel: {
+    fontSize: 14,
+    fontFamily: FontFamily.medium,
+  },
+  documentHint: {
+    fontSize: 12,
+  },
+  documentAdd: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 1.4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  chip: {
+    borderWidth: 1.4,
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  chipLabel: {
+    fontFamily: FontFamily.medium,
+  },
   fieldLabel: {
     fontSize: 15,
     lineHeight: 19,
     fontFamily: FontFamily.medium,
-  },
-  formInput: {
-    minHeight: 77,
-    borderRadius: 20,
-    borderWidth: 1.4,
-    paddingHorizontal: 16,
-    paddingVertical: 0,
-    fontSize: 15,
-    lineHeight: 22,
-    fontFamily: Typography.body.fontFamily,
   },
   readonlyField: {
     minHeight: 77,
@@ -1837,42 +2256,17 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     fontFamily: Typography.body.fontFamily,
   },
-  inputWrap: {
-    minHeight: 77,
-    borderRadius: 20,
+  locationButton: {
+    minHeight: 56,
+    borderRadius: 16,
     borderWidth: 1.4,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 18,
-    paddingHorizontal: 20,
-    marginBottom: 10,
+    paddingHorizontal: 16,
+    gap: 10,
   },
-  input: {
+  locationButtonText: {
     flex: 1,
-    fontSize: 15,
-    lineHeight: 22,
-    paddingVertical: 0,
-    fontFamily: Typography.body.fontFamily,
-  },
-  locationCard: {
-    height: 116,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 22,
-    marginBottom: 10,
-  },
-  locationMiniCard: {
-    minHeight: 77,
-    borderRadius: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  locationText: {
-    fontSize: 13,
-    lineHeight: 16,
     fontFamily: FontFamily.medium,
   },
   photoSheetTitle: {

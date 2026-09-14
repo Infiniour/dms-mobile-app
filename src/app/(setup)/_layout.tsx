@@ -1,23 +1,10 @@
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import { Redirect, Stack } from 'expo-router';
+import { Stack } from 'expo-router';
 import { useNavigationTheme } from '@/hooks/useNavigationTheme';
-import { useSession } from '@/hooks/useSession';
 
+// Gating (which group is even reachable) happens once in the root layout via
+// Stack.Protected — this layout only has to lay out its own screens.
 export default function SetupLayout() {
   const navigationTheme = useNavigationTheme();
-  const { isLoading, hasTokens } = useSession();
-
-  if (isLoading) {
-    return (
-      <View style={[styles.screen, { backgroundColor: navigationTheme.colors.background }]}>
-        <ActivityIndicator size="large" color={navigationTheme.colors.primary} />
-      </View>
-    );
-  }
-
-  if (!hasTokens) {
-    return <Redirect href="/(auth)" />;
-  }
 
   return (
     <Stack
@@ -31,11 +18,3 @@ export default function SetupLayout() {
     </Stack>
   );
 }
-
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});

@@ -9,13 +9,26 @@ import {
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { BackButton, Button, ShowroomPickerModal, type ShowroomRole } from '@/components/ui';
+import {
+  BackButton,
+  Button,
+  ShowroomPickerModal,
+  useAppAlert,
+  type ShowroomRole,
+} from '@/components/ui';
 import { Grid, Typography } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
-import { assignShowroom, createVehicle, getProfile, uploadVehicleImage } from '@/services';
+import {
+  assignShowroom,
+  createVehicle,
+  getProfile,
+  updateVehiclePricing,
+  uploadVehicleImage,
+} from '@/services';
 import { useAuthStore } from '@/store';
 import {
   fuelTypeOptions,
+  indianStateOptions,
   transmissionTypeOptions,
   vehicleTypeOptions,
   yearOfManufactureOptions,
@@ -115,6 +128,7 @@ function isFormComplete(form: VehicleForm) {
 export function AddVehicleScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const { showAlert } = useAppAlert();
   const setPrimaryShowroomId = useAuthStore((s) => s.setPrimaryShowroomId);
   const [form, setForm] = useState<VehicleForm>(() => createDefaultForm());
   const [photos, setPhotos] = useState<VehiclePhoto[]>([]);
@@ -133,6 +147,33 @@ export function AddVehicleScreen() {
 
     try {
       await assignShowroom({ vehicleId, showroomId: showroom.showroom_id });
+
+      // Pricing requires showroom membership on the vehicle server-side — it
+      // 404s if attempted before this assignment, so it can only run now that
+      // the vehicle actually belongs to a showroom. A failure here shouldn't
+      // block the rest of setup, so it's reported rather than thrown.
+      try {
+        const now = new Date();
+
+        await updateVehiclePricing({
+          vehicleId,
+          buyingPrice: Number(form.buyingPrice),
+          buyingDate: now.toISOString().slice(0, 10),
+          priceTag: Number(form.askingPrice),
+          taggedAt: now.toISOString(),
+          currency: 'inr',
+          remarks: undefined,
+        });
+      } catch (pricingError) {
+        showAlert({
+          title: 'Price not set',
+          message:
+            pricingError instanceof Error
+              ? pricingError.message
+              : "Vehicle was added, but its price couldn't be saved. You can set it from Edit Vehicle.",
+          variant: 'error',
+        });
+      }
 
       if (photos.length > 0) {
         const uploadResults = await Promise.allSettled(
@@ -277,23 +318,19 @@ export function AddVehicleScreen() {
 
             <View style={formFieldStyles.fieldRow}>
               <View style={formFieldStyles.fieldColumn}>
-                <FieldLabel label="Vehicle type" />
                 <SelectField
                   label="Vehicle type"
                   value={form.vehicleType}
                   options={vehicleTypeOptions}
                   onChange={(value) => updateField('vehicleType', value)}
-                  placeholder="Select type"
                 />
               </View>
               <View style={formFieldStyles.fieldColumn}>
-                <FieldLabel label="Fuel type" />
                 <SelectField
                   label="Fuel type"
                   value={form.fuelType}
                   options={fuelTypeOptions}
                   onChange={(value) => updateField('fuelType', value)}
-                  placeholder="Select fuel"
                 />
               </View>
             </View>
@@ -338,13 +375,11 @@ export function AddVehicleScreen() {
 
             <View style={formFieldStyles.fieldRow}>
               <View style={formFieldStyles.fieldColumn}>
-                <FieldLabel label="Year" />
                 <SelectField
                   label="Year of manufacture"
                   value={form.yearOfManufacture}
                   options={yearOfManufactureOptions}
                   onChange={(value) => updateField('yearOfManufacture', value)}
-                  placeholder="Select year"
                 />
               </View>
               <View style={formFieldStyles.fieldColumn}>
@@ -371,11 +406,12 @@ export function AddVehicleScreen() {
                 />
               </View>
               <View style={formFieldStyles.fieldColumn}>
-                <FieldLabel label="Registration State" />
-                <FormTextInput
+                <SelectField
+                  label="Registration State"
                   value={form.registrationState}
-                  onChangeText={(value) => updateField('registrationState', value)}
-                  placeholder="Assam"
+                  options={indianStateOptions}
+                  onChange={(value) => updateField('registrationState', value)}
+                  searchable
                 />
               </View>
             </View>
@@ -392,13 +428,11 @@ export function AddVehicleScreen() {
             </View>
 
             <View style={formFieldStyles.fieldGroup}>
-              <FieldLabel label="Transmission type" />
               <SelectField
                 label="Transmission type"
                 value={form.transmissionType}
                 options={transmissionTypeOptions}
                 onChange={(value) => updateField('transmissionType', value)}
-                placeholder="Select transmission"
               />
             </View>
           </View>

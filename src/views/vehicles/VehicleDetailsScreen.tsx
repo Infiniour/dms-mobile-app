@@ -5,6 +5,8 @@ import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import {
   ActivityIndicator,
+  Alert,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -224,23 +226,34 @@ export function VehicleDetailsScreen({ vehicleId }: VehicleDetailsScreenProps) {
           onPress:
             vehicle.status === 'Sold' ? undefined : () => setIsStatusSheetOpen(true),
         },
-        // Already-sold vehicles keep the tile visible but inert, the same way
-        // every other unavailable action on this row reads.
+        // A vehicle can only be sold once it's actually "available" — still
+        // being prepped ("In Garage") or checked over ("Inspection") isn't
+        // ready yet. That case gets a tap-to-explain tile (muted, but still
+        // responds) rather than going silently dead like the sold/no-permission
+        // case, since the fix there is one tap away on Change State.
         {
           label: 'Sell',
           icon: 'tag-outline' as const,
-          onPress:
-            can(PERMISSIONS.SALE_CREATE) && vehicle.status !== 'Sold'
-              ? () =>
-                  router.push({
-                    pathname: '/vehicle/sell/[id]',
-                    params: {
-                      id: vehicle.id,
-                      name: vehicle.name,
-                      registration: vehicle.registration,
-                    },
-                  })
-              : undefined,
+          onPress: !can(PERMISSIONS.SALE_CREATE)
+            ? undefined
+            : vehicle.status === 'Sold'
+              ? undefined
+              : vehicle.status !== 'Available'
+                ? () =>
+                    Alert.alert(
+                      'Not ready to sell',
+                      'Mark this vehicle "Available" from Change State before selling it.'
+                    )
+                : () =>
+                    router.push({
+                      pathname: '/vehicle/sell/[id]',
+                      params: {
+                        id: vehicle.id,
+                        name: vehicle.name,
+                        registration: vehicle.registration,
+                      },
+                    }),
+          muted: can(PERMISSIONS.SALE_CREATE) && vehicle.status !== 'Sold' && vehicle.status !== 'Available',
         },
         ...(openAddExpense ? [{ label: 'Add Expense', icon: 'plus' as const, onPress: openAddExpense }] : []),
       ]
@@ -280,9 +293,6 @@ export function VehicleDetailsScreen({ vehicleId }: VehicleDetailsScreenProps) {
           ) : (
             <MaterialCommunityIcons name={vehicle.icon} size={96} color={colors['on-surface-variant']} />
           )}
-          <View style={[styles.favoriteButton, { backgroundColor: outlineCardBackground }]}>
-            <MaterialCommunityIcons name="heart-outline" size={16} color={colors.primary} />
-          </View>
         </View>
 
         <View style={styles.photoChips}>
@@ -338,22 +348,34 @@ export function VehicleDetailsScreen({ vehicleId }: VehicleDetailsScreenProps) {
         </View>
 
         <View style={styles.actionsGrid}>
-          {actionItems.map((item) => (
-            <Pressable
-              key={item.label}
-              onPress={item.onPress}
-              disabled={!item.onPress}
-              style={({ pressed }) => [
-                styles.actionTile,
-                { backgroundColor: outlineCardBackground, borderColor },
-                pressed && item.onPress ? styles.actionTilePressed : null,
-              ]}>
-              <MaterialCommunityIcons name={item.icon} size={20} color={colors.primary} />
-              <Text style={[styles.actionLabel, { color: colors['on-surface'] }]}>
-                {item.label}
-              </Text>
-            </Pressable>
-          ))}
+          {actionItems.map((item) => {
+            const isInert = !item.onPress;
+            // "muted" tiles still respond (to explain why), just don't look
+            // ready — distinct from truly inert ones (sold, no permission).
+            const looksDisabled = isInert || ('muted' in item && item.muted);
+            const tileColor = looksDisabled ? colors['on-surface-variant'] : colors.primary;
+
+            return (
+              <Pressable
+                key={item.label}
+                onPress={item.onPress}
+                disabled={isInert}
+                style={({ pressed }) => [
+                  styles.actionTile,
+                  {
+                    backgroundColor: outlineCardBackground,
+                    borderColor: looksDisabled ? colors['outline-variant'] : borderColor,
+                    opacity: looksDisabled ? 0.5 : 1,
+                  },
+                  pressed && item.onPress ? styles.actionTilePressed : null,
+                ]}>
+                <MaterialCommunityIcons name={item.icon} size={20} color={tileColor} />
+                <Text style={[styles.actionLabel, { color: looksDisabled ? tileColor : colors['on-surface'] }]}>
+                  {item.label}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
 
         {saleRows.length > 0 ? (
@@ -367,9 +389,14 @@ export function VehicleDetailsScreen({ vehicleId }: VehicleDetailsScreenProps) {
                   key={row.label}
                   label={row.label}
                   value={row.value}
-                  valueColor={row.valueColor}
+                  valueColor={row.label === 'Buyer phone' ? colors.primary : row.valueColor}
                   showDivider={index < saleRows.length - 1}
                   dividerColor={dividerColor}
+                  onPress={
+                    row.label === 'Buyer phone'
+                      ? () => Linking.openURL(`tel:${row.value.replace(/[^\d+]/g, '')}`)
+                      : undefined
+                  }
                 />
               ))}
             </View>
@@ -466,27 +493,36 @@ function DetailRow({
   showDivider,
   dividerColor,
   valueColor,
+  onPress,
 }: {
   label: string;
   value: string;
   showDivider?: boolean;
   dividerColor?: string;
   valueColor?: string;
+  /** e.g. tap-to-call on a phone number — the row stays plain text without it. */
+  onPress?: () => void;
 }) {
   const { colors } = useTheme();
 
   return (
-    <View
-      style={[
+    <Pressable
+      onPress={onPress}
+      disabled={!onPress}
+      style={({ pressed }) => [
         styles.detailRow,
         showDivider && {
           borderBottomColor: dividerColor ?? colors['outline-variant'],
           borderBottomWidth: StyleSheet.hairlineWidth,
         },
+        pressed && onPress ? { opacity: 0.7 } : null,
       ]}>
       <Text style={[styles.detailLabel, { color: colors['on-surface-variant'] }]}>{label}</Text>
-      <Text style={[styles.detailValue, { color: valueColor ?? colors['on-surface'] }]}>{value}</Text>
-    </View>
+      <View style={styles.detailValueRow}>
+        <Text style={[styles.detailValue, { color: valueColor ?? colors['on-surface'] }]}>{value}</Text>
+        {onPress ? <Ionicons name="call" size={14} color={colors.primary} /> : null}
+      </View>
+    </Pressable>
   );
 }
 
@@ -601,7 +637,10 @@ function DocumentRow({
       <View style={styles.documentTitle}>
         <MaterialCommunityIcons name="file-document-outline" size={18} color={colors.primary} />
         <View style={styles.documentTitleText}>
-          <Text style={[styles.documentLabel, { color: colors['on-surface'] }]}>
+          <Text
+            style={[styles.documentLabel, { color: colors['on-surface'] }]}
+            numberOfLines={1}
+            ellipsizeMode="tail">
             {document.label}
           </Text>
           <Text style={[styles.documentMeta, { color: colors['on-surface-variant'] }]}>
@@ -611,11 +650,13 @@ function DocumentRow({
           </Text>
         </View>
       </View>
-      <MaterialCommunityIcons
-        name={complete ? 'check' : 'alert-outline'}
-        size={19}
-        color={complete ? colors.tertiary : colors.error}
-      />
+      {complete ? (
+        <MaterialCommunityIcons name="check-circle" size={19} color={colors.tertiary} />
+      ) : onPress ? (
+        <MaterialCommunityIcons name="chevron-right" size={19} color={colors['on-surface-variant']} />
+      ) : (
+        <Text style={[styles.documentPending, { color: colors['on-surface-variant'] }]}>Pending</Text>
+      )}
     </Pressable>
   );
 }
@@ -759,16 +800,6 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  favoriteButton: {
-    position: 'absolute',
-    right: 13,
-    top: 13,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   photoChips: {
     flexDirection: 'row',
     gap: 10,
@@ -880,9 +911,9 @@ const styles = StyleSheet.create({
   },
   actionLabel: {
     fontFamily: FontFamily.regular,
-    fontSize: 9,
-    lineHeight: 11,
-    marginTop: 7,
+    fontSize: 10,
+    lineHeight: 12,
+    marginTop: 6,
     textAlign: 'center',
   },
   specPanel: {
@@ -951,6 +982,12 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     flexShrink: 0,
     textAlign: 'right',
+  },
+  detailValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 0,
   },
   expenseCard: {
     borderRadius: 20,
@@ -1034,30 +1071,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.medium,
     fontSize: 12,
   },
-  documentsPrompt: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    borderWidth: 0.5,
-    borderRadius: 15,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-  },
-  documentsPromptText: {
-    flex: 1,
-    gap: 3,
-    minWidth: 0,
-  },
-  documentsPromptTitle: {
-    fontFamily: FontFamily.medium,
-    fontSize: 13,
-    lineHeight: 18,
-    includeFontPadding: false,
-  },
-  documentsPromptHint: {
-    ...Typography.caption,
-    fontSize: 11,
-  },
   documentTitleText: {
     flex: 1,
     gap: 2,
@@ -1080,14 +1093,21 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   documentTitle: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    marginRight: 16,
   },
   documentLabel: {
     fontFamily: FontFamily.regular,
     fontSize: 15,
     lineHeight: 18,
+  },
+  documentPending: {
+    ...Typography.caption,
+    fontSize: 11,
   },
   missingContent: {
     flex: 1,

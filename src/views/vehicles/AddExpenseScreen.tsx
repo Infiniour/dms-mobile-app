@@ -18,35 +18,7 @@ import { Grid, Typography } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 import { addVehicleExpense } from '@/services';
 import { FieldLabel, SelectField } from './components/VehicleFormFields';
-
-type ExpenseType =
-  | 'repair'
-  | 'service'
-  | 'insurance'
-  | 'tax'
-  | 'inspection'
-  | 'cleaning'
-  | 'documentation'
-  | 'other';
-
-type Category = {
-  value: ExpenseType;
-  label: string;
-  icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
-};
-
-// The API only accepts these eight values, so the chips are the enum itself
-// rather than a friendlier set that would fail validation on submit.
-const CATEGORIES: Category[] = [
-  { value: 'repair', label: 'Repair', icon: 'wrench-outline' },
-  { value: 'service', label: 'Service', icon: 'car-wrench' },
-  { value: 'insurance', label: 'Insurance', icon: 'shield-check-outline' },
-  { value: 'tax', label: 'Tax', icon: 'receipt' },
-  { value: 'inspection', label: 'Inspection', icon: 'clipboard-check-outline' },
-  { value: 'cleaning', label: 'Cleaning', icon: 'spray-bottle' },
-  { value: 'documentation', label: 'Papers', icon: 'file-document-outline' },
-  { value: 'other', label: 'Other', icon: 'dots-horizontal' },
-];
+import { expenseCategoryOptions, type ExpenseType } from './data';
 
 const DATE_OPTION_DAYS = 60;
 
@@ -166,7 +138,7 @@ export function AddExpenseScreen({
           <View style={styles.fieldGroup}>
             <FieldLabel label="Category" />
             <View style={styles.chips}>
-              {CATEGORIES.map((category) => {
+              {expenseCategoryOptions.map((category) => {
                 const selected = category.value === type;
 
                 return (
@@ -287,14 +259,7 @@ export function AddExpenseScreen({
           </View>
 
           <View style={styles.fieldGroup}>
-            <FieldLabel label="Date" />
-            <SelectField
-              label="Date"
-              value={date}
-              options={dateOptions}
-              onChange={setDate}
-              placeholder="Select date"
-            />
+            <SelectField label="Date" value={date} options={dateOptions} onChange={setDate} />
           </View>
 
           {errorMessage ? (

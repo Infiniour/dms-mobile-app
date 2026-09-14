@@ -1,27 +1,50 @@
-import { useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { useRef, useState } from 'react';
+import { Alert, View, Text, Pressable, StyleSheet, TextInput } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useLogout } from '@/hooks/useLogout';
 import { useTheme } from '@/hooks/useTheme';
 import { Typography, Grid } from '@/constants/theme';
-import { Button, TextField } from '@/components/ui';
+import { Button, FloatingField } from '@/components/ui';
 import { useAuthStore } from '@/store';
-import { updateProfile } from '@/services';
+import { getProfile, updateProfile } from '@/services';
+import { resolveSetupDestination } from '@/utils/setupRouting';
+
+type ProfileResponse = {
+  data?: Parameters<typeof resolveSetupDestination>[0] & {
+    name?: string | null;
+    country_code?: string | null;
+    phone_number?: string | null;
+  };
+};
 
 export function ProfileSetupScreen() {
   const { colors } = useTheme();
   const router = useRouter();
+  const { isLoggingOut, logout } = useLogout();
   const setStoredFullName = useAuthStore((s) => s.setFullName);
-  const [fullName, setFullName] = useState('');
+  const setCanEnterApp = useAuthStore((s) => s.setCanEnterApp);
+  const setProfileContact = useAuthStore((s) => s.setProfileContact);
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const lastNameRef = useRef<TextInput>(null);
+  const canContinue = firstName.trim().length > 0 && lastName.trim().length > 0;
+
+  const handleLogout = () => {
+    Alert.alert('Log out?', 'You can finish setting up your profile later.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Log Out', style: 'destructive', onPress: logout },
+    ]);
+  };
 
   const handleContinue = async () => {
-    const nextName = fullName.trim();
+    const nextName = [firstName.trim(), lastName.trim()].filter(Boolean).join(' ');
 
-    if (!nextName || isSaving) {
+    if (!nextName || !canContinue || isSaving) {
       return;
     }
 
@@ -31,7 +54,24 @@ export function ProfileSetupScreen() {
     try {
       await updateProfile({ name: nextName });
       setStoredFullName(nextName);
-      router.replace('/(setup)/loading');
+
+      // Fetch the just-updated profile and route straight to the next step,
+      // instead of bouncing through /(setup)/loading a second time.
+      const response = await getProfile();
+      const profile = (response as unknown as ProfileResponse).data;
+
+      if (!profile) {
+        throw new Error('Profile data missing from server response.');
+      }
+
+      setProfileContact({
+        countryCode: profile.country_code ?? undefined,
+        phoneNumber: profile.phone_number ?? undefined,
+      });
+
+      const destination = resolveSetupDestination(profile);
+      setCanEnterApp(destination.canEnterApp);
+      router.replace(destination.href);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to update profile.');
     } finally {
@@ -49,9 +89,24 @@ export function ProfileSetupScreen() {
         keyboardVerticalOffset={8}>
         <View style={styles.content}>
           <View style={styles.header}>
-            <Text style={[Typography.hero, styles.title, { color: colors['on-background'] }]}>
-              Welcome!
-            </Text>
+            <View style={styles.titleRow}>
+              <Text style={[Typography.hero, styles.title, { color: colors['on-background'] }]}>
+                Welcome!
+              </Text>
+              <Pressable
+                onPress={handleLogout}
+                disabled={isLoggingOut}
+                hitSlop={8}
+                style={({ pressed }) => [
+                  styles.logoutButton,
+                  {
+                    borderColor: colors.outline,
+                    opacity: pressed || isLoggingOut ? 0.6 : 1,
+                  },
+                ]}>
+                <Ionicons name="log-out-outline" size={16} color={colors['on-surface-variant']} />
+              </Pressable>
+            </View>
             <Text
               style={[
                 Typography.body,
@@ -62,18 +117,31 @@ export function ProfileSetupScreen() {
             </Text>
           </View>
 
-          <TextField
-            label="Full name"
-            labelIcon={
-              <Ionicons name="person-outline" size={14} color={colors.primary} />
-            }
-            value={fullName}
-            onChangeText={setFullName}
-            placeholder="Enter your name"
-            autoComplete="name"
-            textContentType="name"
-            autoCapitalize="words"
-          />
+          <View style={styles.fields}>
+            <FloatingField
+              label="First name"
+              value={firstName}
+              onChangeText={setFirstName}
+              autoComplete="given-name"
+              textContentType="givenName"
+              autoCapitalize="words"
+              autoCorrect={false}
+              returnKeyType="next"
+              onSubmitEditing={() => lastNameRef.current?.focus()}
+            />
+            <FloatingField
+              ref={lastNameRef}
+              label="Last name"
+              value={lastName}
+              onChangeText={setLastName}
+              autoComplete="family-name"
+              textContentType="familyName"
+              autoCapitalize="words"
+              autoCorrect={false}
+              returnKeyType="done"
+              onSubmitEditing={handleContinue}
+            />
+          </View>
 
           {errorMessage ? (
             <Text style={[Typography.caption, styles.errorText, { color: colors.error }]}>
@@ -85,7 +153,7 @@ export function ProfileSetupScreen() {
             <Button
               label="Continue"
               onPress={handleContinue}
-              disabled={fullName.trim().length === 0 || isSaving}
+              disabled={!canContinue || isSaving}
               loading={isSaving}
             />
           </View>
@@ -109,6 +177,20 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
     gap: 24,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  logoutButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   header: {
     gap: 15,
     paddingTop: 20,
@@ -119,6 +201,9 @@ const styles = StyleSheet.create({
   subtitle: {
     paddingBottom: 20,
     lineHeight: 20,
+  },
+  fields: {
+    gap: 20,
   },
   footer: {
     marginTop: 'auto',

@@ -5,10 +5,10 @@ import { useRouter } from 'expo-router';
 import { Button } from '@/components/ui';
 import { Grid, Typography } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
-import { normalizeRole } from '@/permissions';
 import { getProfile } from '@/services';
 import { useAuthStore } from '@/store';
-import { syncShowroomFromProfile, type ShowroomRole } from '@/utils/showroom';
+import { resolveSetupDestination } from '@/utils/setupRouting';
+import type { ShowroomRole } from '@/utils/showroom';
 
 type ProfileData = {
   name?: string | null;
@@ -57,43 +57,16 @@ export function SetupLoadingScreen() {
         phoneNumber: profile.phone_number ?? undefined,
       });
 
-      // Role has to land before the tab bar mounts, otherwise a restricted user
-      // sees the full navigation for a frame and can tap through it.
-      const showroom = syncShowroomFromProfile(profile);
-
       setProfileLoaded(true);
 
-      if (profile.required_name) {
-        setCanEnterApp(false);
-        router.replace('/(setup)/profile');
-        return;
-      }
-
-      if (!profile.has_showrooms) {
-        setCanEnterApp(false);
-        router.replace('/(setup)/welcome');
-        return;
-      }
-
-      if (!profile.has_vehicles) {
-        setCanEnterApp(false);
-        router.replace('/(setup)/welcome?step=vehicle');
-        return;
-      }
-
-      // The app layout sends anyone without a role back here, so entering with
-      // an unresolved role would ping-pong forever. Stop with a retry instead.
-      if (!normalizeRole(showroom?.role)) {
-        setCanEnterApp(false);
-        throw new Error('We could not determine your access for this showroom.');
-      }
-
-      setCanEnterApp(true);
-      router.replace('/(app)');
+      const destination = resolveSetupDestination(profile);
+      setCanEnterApp(destination.canEnterApp);
+      router.replace(destination.href);
     } catch (error) {
+      setCanEnterApp(false);
+
       if (typeof error === 'object' && error !== null && 'status' in error && error.status === 401) {
         setIsLoggedIn(false);
-        setCanEnterApp(false);
         router.replace('/(auth)');
         return;
       }

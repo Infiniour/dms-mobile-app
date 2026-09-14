@@ -65,12 +65,17 @@ export function LoginScreen() {
     }
   };
 
-  const handleVerifyOtp = () => {
-    Keyboard.dismiss();
+  const handleVerifyOtp = (data: { required_name?: boolean }) => {
+    // No explicit Keyboard.dismiss() here — the native sheet's own dismiss
+    // (triggered by setShowOtpSheet below) already takes the keyboard down
+    // with it. Dismissing it separately added a second, competing motion on
+    // top of the sheet closing and the screen fade.
     setIsLoggedIn(true);
     setCanEnterApp(false);
     setShowOtpSheet(false);
-    router.replace('/(setup)/loading');
+    // Skip the /(setup)/loading dispatcher when verify-otp already told us the
+    // name is required — avoids a visible bounce through it on first login.
+    router.replace(data.required_name ? '/(setup)/profile' : '/(setup)/loading');
   };
 
   const handleCloseOtpSheet = () => {

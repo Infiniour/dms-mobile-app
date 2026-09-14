@@ -1,36 +1,57 @@
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import { Redirect, Stack } from 'expo-router';
+import { useEffect } from 'react';
+import { Stack } from 'expo-router';
 import { useNavigationTheme } from '@/hooks/useNavigationTheme';
-import { useSession } from '@/hooks/useSession';
+import { getProfile } from '@/services';
 import { useAuthStore } from '@/store';
+import { resolveSetupDestination } from '@/utils/setupRouting';
 
+// Gating (which group is even reachable) happens once in the root layout via
+// Stack.Protected — this layout only has to lay out its own screens.
 export default function AppLayout() {
   const navigationTheme = useNavigationTheme();
-  const { isLoading, hasTokens } = useSession();
   const canEnterApp = useAuthStore((s) => s.canEnterApp);
-  const role = useAuthStore((s) => s.primaryShowroomRole);
+  const setCanEnterApp = useAuthStore((s) => s.setCanEnterApp);
 
-  if (isLoading) {
-    return (
-      <View style={[styles.loadingScreen, { backgroundColor: navigationTheme.colors.background }]}>
-        <ActivityIndicator size="large" color={navigationTheme.colors.primary} />
-      </View>
-    );
-  }
+  // canEnterApp/role are persisted so a returning, fully-set-up user renders the
+  // app immediately instead of bouncing through /(setup)/loading on every cold
+  // start. Revalidate quietly in the background instead: if the cached state
+  // turns out stale (role revoked, showroom removed…), flip canEnterApp off —
+  // the root layout's guard swaps straight to /(setup)/loading on its own.
+  useEffect(() => {
+    if (!canEnterApp) {
+      return;
+    }
 
-  if (!hasTokens) {
-    return <Redirect href="/(auth)" />;
-  }
+    let cancelled = false;
 
-  if (!canEnterApp) {
-    return <Redirect href="/(setup)/loading" />;
-  }
+    getProfile()
+      .then((response) => {
+        if (cancelled) {
+          return;
+        }
 
-  // Without a role every permission check denies, which would render an app with
-  // no tabs. Send them back through the loader to refetch rather than guess.
-  if (!role) {
-    return <Redirect href="/(setup)/loading" />;
-  }
+        const profile = (response as unknown as { data?: Parameters<typeof resolveSetupDestination>[0] })
+          ?.data;
+
+        if (!profile) {
+          return;
+        }
+
+        const destination = resolveSetupDestination(profile);
+
+        if (destination.href !== '/(app)') {
+          setCanEnterApp(false);
+        }
+      })
+      .catch(() => {
+        // Silent background revalidation — a real problem will surface on the
+        // user's next explicit action instead of yanking them out mid-session.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canEnterApp, setCanEnterApp]);
 
   // The tab bar lives one level down so that detail routes push over it with a
   // real stack transition instead of swapping in as hidden tabs.
@@ -47,11 +68,3 @@ export default function AppLayout() {
     </Stack>
   );
 }
-
-const styles = StyleSheet.create({
-  loadingScreen: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});

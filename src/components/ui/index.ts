@@ -3,6 +3,7 @@ export { BackButton } from './BackButton';
 export { BottomSheet } from './BottomSheet';
 export { OtpInput } from './OtpInput';
 export { TextField } from './TextField';
+export { FloatingField } from './FloatingField';
 export { TabScreen } from './TabScreen';
 export { ScreenTopArea } from './ScreenTopArea';
 export { SkeletonBox } from './SkeletonBox';
