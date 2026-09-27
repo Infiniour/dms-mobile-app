@@ -49,7 +49,7 @@ export function VehiclesScreen() {
   const horizontalPadding = screenWidth < 360 ? 16 : Grid.columns.margin;
 
   const { isLoading } = useTabDataFetch({
-    onFocus: async () => {
+    onFocus: async ({ isCancelled }) => {
       setErrorMessage('');
 
       const knownShowroomId = primaryShowroomIdRef.current;
@@ -77,10 +77,17 @@ export function VehiclesScreen() {
         }
 
         const response = await listVehicles({ showroomId, limit: LISTING_LIMIT });
+        if (isCancelled()) {
+          return;
+        }
+
         const responseData = response as unknown as { data?: ApiVehicleListing };
         const data = responseData?.data ?? (responseData as unknown as ApiVehicleListing);
         setListing(data ?? null);
       } catch (error) {
+        if (isCancelled()) {
+          return;
+        }
         setErrorMessage(error instanceof Error ? error.message : 'Unable to load vehicles.');
       }
     },

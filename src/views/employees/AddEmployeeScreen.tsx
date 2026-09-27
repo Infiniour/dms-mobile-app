@@ -5,12 +5,12 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { FloatingField } from '@/components/ui';
 import { Typography, Grid } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 import { addMember } from '@/services';
@@ -88,48 +88,23 @@ export function AddEmployeeScreen() {
         style={styles.scroll}
         contentContainerStyle={[styles.content, { paddingHorizontal: horizontalPadding }]}
         showsVerticalScrollIndicator={false}>
-        {/* Full Name Input */}
         <View style={styles.section}>
-          <Text style={[styles.label, { color: colors['on-surface'] }]}>
-            Full Name
-          </Text>
-          <TextInput
-            style={[
-              styles.input,
-              {
-                backgroundColor: colors['surface-container-lowest'],
-                borderColor: colors.outline,
-                color: colors['on-surface'],
-              },
-            ]}
-            placeholder="Enter full name"
-            placeholderTextColor={colors['on-surface-variant']}
+          <FloatingField
+            label="Full name"
             value={name}
             onChangeText={setName}
             editable={!isLoading}
+            autoCapitalize="words"
           />
           <Text style={[styles.hint, { color: colors['on-surface-variant'] }]}>
             Employee's full name
           </Text>
         </View>
 
-        {/* Country Code & Phone Number */}
         <View style={styles.phoneRow}>
           <View style={[styles.section, { flex: 1 }]}>
-            <Text style={[styles.label, { color: colors['on-surface'] }]}>
-              Country Code
-            </Text>
-            <TextInput
-              style={[
-                styles.input,
-                {
-                  backgroundColor: colors['surface-container-lowest'],
-                  borderColor: colors.outline,
-                  color: colors['on-surface'],
-                },
-              ]}
-              placeholder="+91"
-              placeholderTextColor={colors['on-surface-variant']}
+            <FloatingField
+              label="Country code"
               value={countryCode}
               onChangeText={setCountryCode}
               keyboardType="number-pad"
@@ -138,20 +113,8 @@ export function AddEmployeeScreen() {
           </View>
 
           <View style={[styles.section, { flex: 1.5 }]}>
-            <Text style={[styles.label, { color: colors['on-surface'] }]}>
-              Phone Number
-            </Text>
-            <TextInput
-              style={[
-                styles.input,
-                {
-                  backgroundColor: colors['surface-container-lowest'],
-                  borderColor: colors.outline,
-                  color: colors['on-surface'],
-                },
-              ]}
-              placeholder="Enter phone number"
-              placeholderTextColor={colors['on-surface-variant']}
+            <FloatingField
+              label="Phone number"
               value={phoneNumber}
               onChangeText={setPhoneNumber}
               keyboardType="phone-pad"

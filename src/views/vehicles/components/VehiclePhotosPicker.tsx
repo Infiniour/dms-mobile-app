@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { BottomSheet } from '@/components/ui';
+import { BottomSheet, CameraCaptureModal } from '@/components/ui';
 import { FontFamily, Typography } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 
@@ -69,6 +69,7 @@ export function VehiclePhotosPicker({
   // is the take-photo/choose-from-library step. A slot with photos opens on
   // 'manage' so a second tap doesn't just re-launch the camera on top of what's there.
   const [sheetMode, setSheetMode] = useState<'manage' | 'source'>('source');
+  const [cameraLabel, setCameraLabel] = useState<PhotoLabel | null>(null);
 
   const getSlotEntries = (label: PhotoLabel): SlotEntry[] => [
     ...existingPhotos
@@ -84,7 +85,10 @@ export function VehiclePhotosPicker({
     setSheetMode(getSlotEntries(label).length > 0 ? 'manage' : 'source');
   };
 
-  const addPhoto = (asset: ImagePicker.ImagePickerAsset, label: PhotoLabel) => {
+  const addPhoto = (
+    asset: { uri: string; fileName?: string | null; mimeType?: string | null },
+    label: PhotoLabel
+  ) => {
     onChange([...photos, { uri: asset.uri, name: asset.fileName, type: asset.mimeType, label }]);
   };
 
@@ -92,19 +96,8 @@ export function VehiclePhotosPicker({
     onChange(photos.filter((current) => current !== photo));
   };
 
-  const handleTakePhoto = async (label: PhotoLabel) => {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-
-    if (!permission.granted) {
-      Alert.alert('Camera access needed', 'Please allow camera access to take a vehicle photo.');
-      return;
-    }
-
-    const result = await ImagePicker.launchCameraAsync({ quality: 0.85 });
-
-    if (!result.canceled && result.assets[0]) {
-      addPhoto(result.assets[0], label);
-    }
+  const handleTakePhoto = (label: PhotoLabel) => {
+    setCameraLabel(label);
   };
 
   const handleChooseFromLibrary = async (label: PhotoLabel, remainingSlots: number) => {
@@ -290,6 +283,16 @@ export function VehiclePhotosPicker({
           </>
         )}
       </BottomSheet>
+
+      <CameraCaptureModal
+        visible={cameraLabel !== null}
+        onClose={() => setCameraLabel(null)}
+        onCapture={(photo) => {
+          if (cameraLabel) {
+            addPhoto(photo, cameraLabel);
+          }
+        }}
+      />
     </View>
   );
 }

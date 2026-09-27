@@ -37,7 +37,7 @@ export function SalesPanelScreen() {
   const canSell = can(PERMISSIONS.SALE_CREATE);
 
   const { isLoading } = useTabDataFetch({
-    onFocus: async () => {
+    onFocus: async ({ isCancelled }) => {
       setErrorMessage('');
 
       try {
@@ -52,11 +52,18 @@ export function SalesPanelScreen() {
           status: SALES_STATUSES,
           limit: LISTING_LIMIT,
         });
+        if (isCancelled()) {
+          return;
+        }
+
         const responseData = response as unknown as { data?: ApiVehicleListing };
         const data = responseData?.data ?? (responseData as unknown as ApiVehicleListing);
 
         setVehicles(toSaleVehicles(data));
       } catch (error) {
+        if (isCancelled()) {
+          return;
+        }
         setErrorMessage(error instanceof Error ? error.message : 'Unable to load vehicles.');
       }
     },

@@ -5,20 +5,16 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
-import {
-  KeyboardAwareScrollView,
-  KeyboardStickyView,
-} from 'react-native-keyboard-controller';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useLogout } from '@/hooks/useLogout';
 import { useTheme } from '@/hooks/useTheme';
 import { Typography, Grid } from '@/constants/theme';
-import { Button, FloatingField } from '@/components/ui';
+import { Button, FloatingField, type FloatingFieldHandle } from '@/components/ui';
 import { useAuthStore } from '@/store';
 import { getProfile, updateProfile } from '@/services';
 import { resolveSetupDestination } from '@/utils/setupRouting';
@@ -43,7 +39,7 @@ export function ProfileSetupScreen() {
   const [lastName, setLastName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const lastNameRef = useRef<TextInput>(null);
+  const lastNameRef = useRef<FloatingFieldHandle>(null);
   const canContinue = firstName.trim().length > 0 && lastName.trim().length > 0;
 
   const handleLogout = () => {
@@ -97,12 +93,14 @@ export function ProfileSetupScreen() {
       edges={['top']}>
       <KeyboardAwareScrollView
         style={styles.flex}
+        mode="layout"
         bottomOffset={24}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}>
-        <View style={styles.header}>
+        <View style={styles.form}>
+          <View style={styles.header}>
           <View style={styles.titleRow}>
             <Text style={[Typography.hero, styles.title, { color: colors['on-background'] }]}>
               Welcome!
@@ -163,18 +161,16 @@ export function ProfileSetupScreen() {
             {errorMessage}
           </Text>
         ) : null}
+        </View>
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+          <Button
+            label="Continue"
+            onPress={handleContinue}
+            disabled={!canContinue || isSaving}
+            loading={isSaving}
+          />
+        </View>
       </KeyboardAwareScrollView>
-
-      <KeyboardStickyView
-        offset={{ closed: 0, opened: insets.bottom }}
-        style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 24) }]}>
-        <Button
-          label="Continue"
-          onPress={handleContinue}
-          disabled={!canContinue || isSaving}
-          loading={isSaving}
-        />
-      </KeyboardStickyView>
     </SafeAreaView>
   );
 }
@@ -187,9 +183,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
+    flexGrow: 1,
     paddingHorizontal: Grid.columns.margin,
     paddingTop: 50,
-    paddingBottom: 16,
+  },
+  form: {
+    flexGrow: 1,
     gap: 24,
   },
   titleRow: {
@@ -221,7 +220,6 @@ const styles = StyleSheet.create({
     gap: 20,
   },
   footer: {
-    paddingHorizontal: Grid.columns.margin,
     paddingTop: 10,
   },
   errorText: {

@@ -5,7 +5,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
   useWindowDimensions,
   Image,
@@ -17,7 +16,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Grid, FontFamily } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 import { getShowroom, updateShowroom } from '@/services';
-import { BackButton, SkeletonBox } from '@/components/ui';
+import { BackButton, SkeletonBox, FloatingField } from '@/components/ui';
 
 type ShowroomDetails = {
   id: number;
@@ -256,17 +255,8 @@ export function ShowroomEditScreen() {
             </View>
           </Pressable>
 
-          {/* Name Input */}
-          <TextInput
-            style={[
-              styles.nameInput,
-              {
-                color: colors['on-surface'],
-                borderColor: colors.outline,
-              },
-            ]}
-            placeholder="Showroom Name"
-            placeholderTextColor={colors['on-surface-variant']}
+          <FloatingField
+            label="Showroom name"
             value={name}
             onChangeText={setName}
             editable={!isSaving}
@@ -285,87 +275,41 @@ export function ShowroomEditScreen() {
               Address Details
             </Text>
 
-            {/* Address Input */}
-            <View
-              style={[
-                styles.inputRow,
-                { borderBottomColor: colors.outline },
-              ]}>
-              <View style={[styles.detailIcon, { backgroundColor: colors['surface-container-high'] }]}>
-                <Ionicons name="location-outline" size={20} color={colors.primary} />
+            <FloatingField
+              label="Address"
+              icon="location-outline"
+              value={address}
+              onChangeText={setAddress}
+              editable={!isSaving}
+            />
+
+            <View style={styles.rowFields}>
+              <View style={styles.rowField}>
+                <FloatingField
+                  label="City"
+                  value={city}
+                  onChangeText={setCity}
+                  editable={!isSaving}
+                />
               </View>
-              <View style={styles.detailContent}>
-                <Text style={[styles.detailLabel, { color: colors['on-surface-variant'] }]}>
-                  Address
-                </Text>
-                <TextInput
-                  style={[styles.detailInput, { color: colors['on-surface'] }]}
-                  placeholder="Enter address"
-                  placeholderTextColor={colors['on-surface-variant']}
-                  value={address}
-                  onChangeText={setAddress}
+              <View style={styles.rowField}>
+                <FloatingField
+                  label="State"
+                  value={state}
+                  onChangeText={setState}
                   editable={!isSaving}
                 />
               </View>
             </View>
 
-            {/* City/State Input */}
-            <View
-              style={[
-                styles.inputRow,
-                { borderBottomColor: colors.outline },
-              ]}>
-              <View style={[styles.detailIcon, { backgroundColor: colors['surface-container-high'] }]}>
-                <Ionicons name="map-outline" size={20} color={colors.primary} />
-              </View>
-              <View style={styles.detailContent}>
-                <Text style={[styles.detailLabel, { color: colors['on-surface-variant'] }]}>
-                  City / State
-                </Text>
-                <View style={styles.rowInputs}>
-                  <TextInput
-                    style={[styles.detailInput, { color: colors['on-surface'], flex: 1 }]}
-                    placeholder="City"
-                    placeholderTextColor={colors['on-surface-variant']}
-                    value={city}
-                    onChangeText={setCity}
-                    editable={!isSaving}
-                  />
-                  <Text style={[styles.inputSeparator, { color: colors['on-surface-variant'] }]}>
-                    /
-                  </Text>
-                  <TextInput
-                    style={[styles.detailInput, { color: colors['on-surface'], flex: 1 }]}
-                    placeholder="State"
-                    placeholderTextColor={colors['on-surface-variant']}
-                    value={state}
-                    onChangeText={setState}
-                    editable={!isSaving}
-                  />
-                </View>
-              </View>
-            </View>
-
-            {/* Pincode Input */}
-            <View style={styles.inputRow}>
-              <View style={[styles.detailIcon, { backgroundColor: colors['surface-container-high'] }]}>
-                <Ionicons name="mail-outline" size={20} color={colors.primary} />
-              </View>
-              <View style={styles.detailContent}>
-                <Text style={[styles.detailLabel, { color: colors['on-surface-variant'] }]}>
-                  Pincode
-                </Text>
-                <TextInput
-                  style={[styles.detailInput, { color: colors['on-surface'] }]}
-                  placeholder="Enter pincode"
-                  placeholderTextColor={colors['on-surface-variant']}
-                  value={pincode}
-                  onChangeText={setPincode}
-                  editable={!isSaving}
-                  keyboardType="numeric"
-                />
-              </View>
-            </View>
+            <FloatingField
+              label="Pincode"
+              icon="mail-outline"
+              value={pincode}
+              onChangeText={setPincode}
+              editable={!isSaving}
+              keyboardType="numeric"
+            />
 
             {/* Location Coordinates (Read-only) */}
             {showroom.geolocation?.lat && showroom.geolocation?.lng && (
@@ -513,7 +457,14 @@ const styles = StyleSheet.create({
     gap: 20,
   },
   section: {
-    gap: 0,
+    gap: 12,
+  },
+  rowFields: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  rowField: {
+    flex: 1,
   },
   sectionTitle: {
     fontFamily: FontFamily.medium,

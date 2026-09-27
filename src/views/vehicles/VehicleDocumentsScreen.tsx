@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
-import { BackButton, BottomSheet, Button, useAppAlert } from '@/components/ui';
+import { BackButton, BottomSheet, Button, CameraCaptureModal, useAppAlert } from '@/components/ui';
 import { FontFamily, Grid, Typography } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 import { useFocusEffect } from 'expo-router';
@@ -46,6 +46,7 @@ export function VehicleDocumentsScreen({
   const { width: screenWidth } = useWindowDimensions();
   const [documents, setDocuments] = useState<DocumentsState>({});
   const [pickerSlot, setPickerSlot] = useState<DocumentSlot | null>(null);
+  const [cameraSlot, setCameraSlot] = useState<DocumentSlot | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -214,33 +215,24 @@ export function VehicleDocumentsScreen({
     );
   };
 
-  const pickImages = async (slot: DocumentSlot, source: 'camera' | 'gallery') => {
-    const permission =
-      source === 'camera'
-        ? await ImagePicker.requestCameraPermissionsAsync()
-        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+  const pickImages = async (slot: DocumentSlot, source: 'gallery') => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permission.granted) {
       showAlert({
         title: 'Permission needed',
-        message:
-          source === 'camera'
-            ? 'Allow camera access to photograph this document.'
-            : 'Allow photo access to attach document photos.',
+        message: 'Allow photo access to attach document photos.',
         variant: 'error',
       });
       return;
     }
 
-    const result =
-      source === 'camera'
-        ? await ImagePicker.launchCameraAsync({ quality: 0.9 })
-        : await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ['images'],
-            // Multi-select, because a document is usually more than one page.
-            allowsMultipleSelection: true,
-            quality: 0.9,
-          });
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      // Multi-select, because a document is usually more than one page.
+      allowsMultipleSelection: true,
+      quality: 0.9,
+    });
 
     if (result.canceled) {
       return;
@@ -282,7 +274,12 @@ export function VehicleDocumentsScreen({
       return;
     }
 
-    await pickImages(slot, action);
+    if (action === 'camera') {
+      setCameraSlot(slot);
+      return;
+    }
+
+    await pickImages(slot, 'gallery');
   };
 
   return (
@@ -413,6 +410,26 @@ export function VehicleDocumentsScreen({
           />
         </View>
       </BottomSheet>
+
+      <CameraCaptureModal
+        visible={cameraSlot !== null}
+        onClose={() => setCameraSlot(null)}
+        onCapture={(photo) => {
+          if (!cameraSlot) {
+            return;
+          }
+
+          const existing = documents[cameraSlot.type]?.length ?? 0;
+          addFiles(cameraSlot.type, [
+            {
+              id: `${photo.uri}-${Date.now()}`,
+              uri: photo.uri,
+              name: photo.fileName || `${cameraSlot.label} page ${existing + 1}`,
+              kind: 'image',
+            },
+          ]);
+        }}
+      />
     </SafeAreaView>
   );
 }

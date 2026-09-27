@@ -3,18 +3,25 @@ import {
   Alert,
   Image,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { BottomSheet, Button, FloatingField, ShowroomPickerModal, type ShowroomRole } from '@/components/ui';
+import {
+  BottomSheet,
+  Button,
+  FloatingField,
+  LocationPickerModal,
+  CameraCaptureModal,
+  ShowroomPickerModal,
+  type ShowroomRole,
+} from '@/components/ui';
 import { FontFamily, Grid, Typography } from '@/constants/theme';
 import { useLogout } from '@/hooks/useLogout';
 import { useTheme } from '@/hooks/useTheme';
@@ -154,12 +161,11 @@ const SAMPLE_VEHICLES = [
 
 export function WelcomeSetupScreen() {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { isLoggingOut, logout } = useLogout();
   const params = useLocalSearchParams<{ step?: string }>();
   const fullName = useAuthStore((s) => s.fullName);
-  const countryCode = useAuthStore((s) => s.countryCode);
-  const phoneNumber = useAuthStore((s) => s.phoneNumber);
   const completeProfile = useAuthStore((s) => s.completeProfile);
   const setCanEnterApp = useAuthStore((s) => s.setCanEnterApp);
   const setFullName = useAuthStore((s) => s.setFullName);
@@ -177,6 +183,7 @@ export function WelcomeSetupScreen() {
   const [latitude, setLatitude] = useState('');
   const [longitude, setLongitude] = useState('');
   const [locationPinned, setLocationPinned] = useState(false);
+  const [locationPickerOpen, setLocationPickerOpen] = useState(false);
   const [isFetchingLocation, setIsFetchingLocation] = useState(false);
   const [isCreatingShowroom, setIsCreatingShowroom] = useState(false);
   const [isCreatingVehicle, setIsCreatingVehicle] = useState(false);
@@ -185,6 +192,10 @@ export function WelcomeSetupScreen() {
   const [logoImage, setLogoImage] = useState<PickedImage | null>(null);
   const [bannerImage, setBannerImage] = useState<PickedImage | null>(null);
   const [photoPickerTarget, setPhotoPickerTarget] = useState<'logo' | 'banner' | DocumentType | null>(
+    null
+  );
+  const [cameraCaptureOpen, setCameraCaptureOpen] = useState(false);
+  const [cameraCaptureTarget, setCameraCaptureTarget] = useState<'logo' | 'banner' | DocumentType | null>(
     null
   );
   const [vehicleNumber, setVehicleNumber] = useState('');
@@ -199,7 +210,6 @@ export function WelcomeSetupScreen() {
   const [showroomOptions, setShowroomOptions] = useState<ShowroomRole[]>([]);
   const hasShowroomSelection = Boolean(pendingVehicleId && showroomOptions.length > 1);
   const isSubmitting = isCreatingShowroom || isCreatingVehicle || isAssigningVehicle || isCheckingNextStep;
-  const readonlyPhoneNumber = formatProfilePhone(countryCode, phoneNumber);
   const activeTab = showroomComplete && step === 'welcome' ? 'Welcome' : tabForStep(step);
 
   const canContinue = useMemo(() => {
@@ -230,12 +240,12 @@ export function WelcomeSetupScreen() {
 
   const applyPickedImage = (
     target: 'logo' | 'banner' | DocumentType,
-    asset: ImagePicker.ImagePickerAsset
+    asset: { uri: string; fileName?: string | null; mimeType?: string | null; name?: string | null; type?: string | null }
   ) => {
     const image = {
       uri: asset.uri,
-      name: asset.fileName,
-      type: asset.mimeType,
+      name: asset.fileName ?? asset.name,
+      type: asset.mimeType ?? asset.type,
     };
 
     if (target === 'banner') {
@@ -251,28 +261,9 @@ export function WelcomeSetupScreen() {
     setDocumentFiles((current) => ({ ...current, [target]: image }));
   };
 
-  const handleTakePhoto = async (target: 'logo' | 'banner' | DocumentType) => {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-
-    if (!permission.granted) {
-      Alert.alert(
-        'Camera access needed',
-        'Please allow camera access to take a photo.'
-      );
-      return;
-    }
-
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: target === 'logo' || target === 'banner',
-      aspect: target === 'banner' ? [16, 6] : target === 'logo' ? [1, 1] : undefined,
-      quality: 0.85,
-    });
-
-    if (result.canceled || !result.assets[0]) {
-      return;
-    }
-
-    applyPickedImage(target, result.assets[0]);
+  const handleTakePhoto = (target: 'logo' | 'banner' | DocumentType) => {
+    setCameraCaptureTarget(target);
+    setCameraCaptureOpen(true);
   };
 
   const handleChooseFromLibrary = async (target: 'logo' | 'banner' | DocumentType) => {
@@ -324,43 +315,18 @@ export function WelcomeSetupScreen() {
     handleChooseFromLibrary(target);
   };
 
-  const handleUseCurrentLocation = async () => {
-    if (isFetchingLocation) {
-      return;
-    }
-
+  const handleConfirmMapLocation = async (coords: { latitude: number; longitude: number }) => {
+    setLocationPickerOpen(false);
     setIsFetchingLocation(true);
+    setLatitude(coords.latitude.toFixed(6));
+    setLongitude(coords.longitude.toFixed(6));
+    setLocationPinned(true);
 
     try {
-      const permission = await Location.requestForegroundPermissionsAsync();
-
-      if (!permission.granted) {
-        Alert.alert(
-          'Location access needed',
-          'Please allow location access to auto-fill showroom address details.'
-        );
-        return;
-      }
-
-      const position = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-      });
-      const lat = position.coords.latitude;
-      const lng = position.coords.longitude;
-
-      setLatitude(lat.toFixed(6));
-      setLongitude(lng.toFixed(6));
-      setLocationPinned(true);
-
-      const [place] = await Location.reverseGeocodeAsync({
-        latitude: lat,
-        longitude: lng,
-      });
+      const [place] = await Location.reverseGeocodeAsync(coords);
 
       if (place) {
-        const streetAddress = [place.name, place.street, place.district]
-          .filter(Boolean)
-          .join(', ');
+        const streetAddress = [place.name, place.street, place.district].filter(Boolean).join(', ');
 
         setAddress(streetAddress);
         setCity(place.city ?? place.subregion ?? '');
@@ -369,8 +335,10 @@ export function WelcomeSetupScreen() {
       }
     } catch (error) {
       Alert.alert(
-        'Location unavailable',
-        error instanceof Error ? error.message : 'Unable to fetch your current location.'
+        'Address unavailable',
+        error instanceof Error
+          ? error.message
+          : 'The pin was saved, but the address could not be filled in. You can type it.'
       );
     } finally {
       setIsFetchingLocation(false);
@@ -748,121 +716,125 @@ export function WelcomeSetupScreen() {
   return (
     <SafeAreaView
       style={[styles.screen, { backgroundColor: colors.background }]}
-      edges={['top', 'bottom']}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior="padding"
-        keyboardVerticalOffset={8}>
-        <View style={styles.content}>
-          <View style={styles.topBar}>
-            <View style={styles.tabsFlex}>
-              <StepTabs
-                activeTab={activeTab}
-                showroomComplete={showroomComplete}
-                vehicleComplete={vehicleComplete}
-              />
-            </View>
-            <Pressable
-              onPress={handleLogout}
-              disabled={isLoggingOut}
-              hitSlop={8}
-              style={({ pressed }) => [
-                styles.logoutButton,
-                {
-                  borderColor: colors.outline,
-                  opacity: pressed || isLoggingOut ? 0.6 : 1,
-                },
-              ]}>
-              <Ionicons name="log-out-outline" size={16} color={colors['on-surface-variant']} />
-            </Pressable>
-          </View>
-
-          <ScrollView
-            key={step}
-            style={styles.scroll}
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled">
-            {step === 'welcome' ? (
-              <WelcomePart
-                showroomComplete={showroomComplete}
-                vehicleComplete={vehicleComplete}
-                onShowroomPress={() => setStep('showroom')}
-                onVehiclePress={() => showroomComplete && setStep('vehicle')}
-              />
-            ) : null}
-
-            {step === 'showroom' ? (
-              <ShowroomPart
-                showroomName={showroomName}
-                address={address}
-                city={city}
-                showroomState={showroomState}
-                pincode={pincode}
-                phoneNumber={readonlyPhoneNumber}
-                logoImageUri={logoImage?.uri}
-                bannerImageUri={bannerImage?.uri}
-                locationPinned={locationPinned}
-                isFetchingLocation={isFetchingLocation}
-                onShowroomNameChange={setShowroomName}
-                onAddressChange={setAddress}
-                onCityChange={setCity}
-                onShowroomStateChange={setShowroomState}
-                onPincodeChange={setPincode}
-                onPickLogo={() => handlePickImage('logo')}
-                onPickBanner={() => handlePickImage('banner')}
-                onLocationPress={handleUseCurrentLocation}
-                onFillTestData={__DEV__ ? handleFillTestShowroom : undefined}
-              />
-            ) : null}
-
-            {step === 'vehicle' ? (
-              <VehiclePart
-                form={vehicleForm}
-                onFieldChange={updateVehicleField}
-                photos={vehiclePhotos}
-                onPhotosChange={setVehiclePhotos}
-                onFillTestData={__DEV__ ? handleFillTestVehicle : undefined}
-                documentFiles={documentFiles}
-                onPickDocument={handlePickImage}
-                onRemoveDocument={(type) =>
-                  setDocumentFiles((current) => {
-                    const next = { ...current };
-                    delete next[type];
-                    return next;
-                  })
-                }
-                expenseType={expenseType}
-                onExpenseTypeChange={setExpenseType}
-                expenseAmount={expenseAmount}
-                onExpenseAmountChange={setExpenseAmount}
-                expensePaidTo={expensePaidTo}
-                onExpensePaidToChange={setExpensePaidTo}
-                expenseDescription={expenseDescription}
-                onExpenseDescriptionChange={setExpenseDescription}
-              />
-            ) : null}
-
-            {step === 'done' ? (
-              <DonePart showroomName={showroomName} vehicleNumber={vehicleNumber} />
-            ) : null}
-          </ScrollView>
-
-          <View style={styles.footer}>
-            <Button
-              label={buttonLabel(step, {
-                isCheckingNextStep,
-                isCreatingShowroom,
-                isCreatingVehicle,
-                isAssigningVehicle,
-              })}
-              onPress={handlePrimaryAction}
-              disabled={!canContinue || isSubmitting || hasShowroomSelection}
-              loading={(step === 'showroom' || step === 'vehicle') && isSubmitting}
-            />
-          </View>
+      edges={['top']}>
+      {/*
+        Standard form page (keyboard-controller):
+        header stays put, fields + Continue live in one KeyboardAwareScrollView.
+        mode="layout" adds keyboard space inside the scroll so the form and
+        button rise together. You can still scroll a long step.
+      */}
+      <View style={styles.topBarWrap}>
+        <View style={styles.tabsFlex}>
+          <StepTabs
+            activeTab={activeTab}
+            showroomComplete={showroomComplete}
+            vehicleComplete={vehicleComplete}
+          />
         </View>
-      </KeyboardAvoidingView>
+        <Pressable
+          onPress={handleLogout}
+          disabled={isLoggingOut}
+          hitSlop={8}
+          style={({ pressed }) => [
+            styles.logoutButton,
+            {
+              borderColor: colors.outline,
+              opacity: pressed || isLoggingOut ? 0.6 : 1,
+            },
+          ]}>
+          <Ionicons name="log-out-outline" size={16} color={colors['on-surface-variant']} />
+        </Pressable>
+      </View>
+
+      <KeyboardAwareScrollView
+        key={step}
+        style={styles.scroll}
+        mode="layout"
+        bottomOffset={24}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}>
+        <View style={styles.formBody}>
+          {step === 'welcome' ? (
+            <WelcomePart
+              showroomComplete={showroomComplete}
+              vehicleComplete={vehicleComplete}
+              onShowroomPress={() => setStep('showroom')}
+              onVehiclePress={() => showroomComplete && setStep('vehicle')}
+            />
+          ) : null}
+
+          {step === 'showroom' ? (
+            <ShowroomPart
+              showroomName={showroomName}
+              address={address}
+              city={city}
+              showroomState={showroomState}
+              pincode={pincode}
+              logoImageUri={logoImage?.uri}
+              bannerImageUri={bannerImage?.uri}
+              locationPinned={locationPinned}
+              isFetchingLocation={isFetchingLocation}
+              onShowroomNameChange={setShowroomName}
+              onAddressChange={setAddress}
+              onCityChange={setCity}
+              onShowroomStateChange={setShowroomState}
+              onPincodeChange={setPincode}
+              onPickLogo={() => handlePickImage('logo')}
+              onPickBanner={() => handlePickImage('banner')}
+              onLocationPress={() => setLocationPickerOpen(true)}
+              onFillTestData={__DEV__ ? handleFillTestShowroom : undefined}
+            />
+          ) : null}
+
+          {step === 'vehicle' ? (
+            <VehiclePart
+              form={vehicleForm}
+              onFieldChange={updateVehicleField}
+              photos={vehiclePhotos}
+              onPhotosChange={setVehiclePhotos}
+              onFillTestData={__DEV__ ? handleFillTestVehicle : undefined}
+              documentFiles={documentFiles}
+              onPickDocument={handlePickImage}
+              onRemoveDocument={(type) =>
+                setDocumentFiles((current) => {
+                  const next = { ...current };
+                  delete next[type];
+                  return next;
+                })
+              }
+              expenseType={expenseType}
+              onExpenseTypeChange={setExpenseType}
+              expenseAmount={expenseAmount}
+              onExpenseAmountChange={setExpenseAmount}
+              expensePaidTo={expensePaidTo}
+              onExpensePaidToChange={setExpensePaidTo}
+              expenseDescription={expenseDescription}
+              onExpenseDescriptionChange={setExpenseDescription}
+            />
+          ) : null}
+
+          {step === 'done' ? (
+            <DonePart showroomName={showroomName} vehicleNumber={vehicleNumber} />
+          ) : null}
+        </View>
+
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16), marginTop: 20 }]}>
+          <Button
+            label={buttonLabel(step, {
+              isCheckingNextStep,
+              isCreatingShowroom,
+              isCreatingVehicle,
+              isAssigningVehicle,
+            })}
+            onPress={handlePrimaryAction}
+            disabled={!canContinue || isSubmitting || hasShowroomSelection}
+            loading={(step === 'showroom' || step === 'vehicle') && isSubmitting}
+          />
+        </View>
+      </KeyboardAwareScrollView>
+
       <ShowroomPickerModal
         visible={hasShowroomSelection}
         showrooms={showroomOptions}
@@ -876,6 +848,25 @@ export function WelcomeSetupScreen() {
         onSelect={(showroom) => {
           if (pendingVehicleId) {
             completeVehicleAssignment(pendingVehicleId, showroom);
+          }
+        }}
+      />
+      <LocationPickerModal
+        visible={locationPickerOpen}
+        initialLatitude={latitude ? Number(latitude) : undefined}
+        initialLongitude={longitude ? Number(longitude) : undefined}
+        onClose={() => setLocationPickerOpen(false)}
+        onConfirm={handleConfirmMapLocation}
+      />
+      <CameraCaptureModal
+        visible={cameraCaptureOpen}
+        onClose={() => {
+          setCameraCaptureOpen(false);
+          setCameraCaptureTarget(null);
+        }}
+        onCapture={(photo) => {
+          if (cameraCaptureTarget) {
+            applyPickedImage(cameraCaptureTarget, photo);
           }
         }}
       />
@@ -902,18 +893,6 @@ function tabForStep(step: SetupStep) {
   }
 
   return 'Welcome';
-}
-
-function formatProfilePhone(countryCode: string, phoneNumber: string) {
-  if (!phoneNumber) {
-    return '';
-  }
-
-  const digits = phoneNumber.replace(/\D/g, '');
-  const code = countryCode.replace(/\D/g, '');
-  const localNumber = code && digits.startsWith(code) ? digits.slice(code.length) : digits;
-
-  return code ? `+${code} - ${localNumber}` : localNumber;
 }
 
 function getApiResponseBody(response: unknown) {
@@ -1337,7 +1316,6 @@ function ShowroomPart({
   city,
   showroomState,
   pincode,
-  phoneNumber,
   logoImageUri,
   bannerImageUri,
   locationPinned,
@@ -1357,7 +1335,6 @@ function ShowroomPart({
   city: string;
   showroomState: string;
   pincode: string;
-  phoneNumber: string;
   logoImageUri?: string;
   bannerImageUri?: string;
   locationPinned: boolean;
@@ -1403,10 +1380,9 @@ function ShowroomPart({
           onChangeText={onShowroomNameChange}
         />
 
-        {/* Up front, before the address fields it fills in — tapping this is
-            meant to replace typing the address by hand, not follow it. Raw
-            lat/long values aren't shown anywhere: nothing a showroom owner
-            would do with those numbers, they only matter to the map pin. */}
+        {/* Opens a map. The chosen pin is reverse-geocoded into the address
+            fields below. Lat/long stay off the form and only go out with the
+            showroom payload. */}
         <Pressable
           onPress={onLocationPress}
           disabled={isFetchingLocation}
@@ -1425,10 +1401,10 @@ function ShowroomPart({
           />
           <Text style={[Typography.body, styles.locationButtonText, { color: colors.primary }]}>
             {isFetchingLocation
-              ? 'Fetching your location...'
+              ? 'Fetching address...'
               : locationPinned
-                ? 'Location pinned — tap to refresh'
-                : 'Use current location'}
+                ? 'Location pinned — tap to change'
+                : 'Pick location on map'}
           </Text>
           {!isFetchingLocation ? (
             <Ionicons name="chevron-forward" size={16} color={colors.primary} />
@@ -1452,14 +1428,6 @@ function ShowroomPart({
           onChangeText={(value) => onPincodeChange(value.replace(/\D/g, '').slice(0, 6))}
           keyboardType="number-pad"
           maxLength={6}
-        />
-
-        <FloatingField
-          label="Phone number"
-          icon="call-outline"
-          value={phoneNumber}
-          editable={false}
-          selectTextOnFocus={false}
         />
       </View>
     </View>
@@ -1905,17 +1873,24 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: Grid.columns.margin,
-    paddingTop: 18,
-    paddingBottom: 24,
   },
   scroll: {
     flex: 1,
   },
   scrollContent: {
     flexGrow: 1,
-    paddingTop: 21,
-    paddingBottom: 28,
+    paddingHorizontal: Grid.columns.margin,
+    paddingTop: 12,
+  },
+  formBody: {
+    flexGrow: 1,
+  },
+  topBarWrap: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    paddingHorizontal: Grid.columns.margin,
+    paddingTop: 18,
   },
   topBar: {
     flexDirection: 'row',

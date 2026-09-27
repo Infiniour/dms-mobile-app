@@ -1,102 +1,59 @@
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { FontFamily } from '@/constants/theme';
+import { FloatingField } from '@/components/ui';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
 type FormInputProps = {
   label: string;
-  placeholder: string;
+  placeholder?: string;
   value: string;
   onChangeText: (text: string) => void;
-  icon: IconName;
-  iconColor: string;
-  backgroundColor: string;
-  borderBottomColor: string;
-  labelColor: string;
-  inputColor: string;
-  placeholderColor: string;
-  keyboardType?: 'default' | 'numeric' | 'decimal-pad' | 'email-address';
+  icon?: IconName;
+  iconColor?: string;
+  backgroundColor?: string;
+  borderBottomColor?: string;
+  labelColor?: string;
+  inputColor?: string;
+  placeholderColor?: string;
+  keyboardType?: 'default' | 'numeric' | 'decimal-pad' | 'email-address' | 'number-pad' | 'phone-pad';
   editable?: boolean;
   required?: boolean;
+  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
 };
 
+/**
+ * Shared form field — Paper outlined input so every screen gets the same
+ * floating label and full-box tap target.
+ */
 export function FormInput({
   label,
   placeholder,
   value,
   onChangeText,
   icon,
-  iconColor,
-  backgroundColor,
-  borderBottomColor,
-  labelColor,
-  inputColor,
-  placeholderColor,
   keyboardType = 'default',
   editable = true,
   required = false,
+  autoCapitalize,
 }: FormInputProps) {
   return (
-    <View style={[styles.row, { borderBottomColor }]}>
-      <View style={[styles.iconBox, { backgroundColor }]}>
-        <Ionicons name={icon} size={28} color={iconColor} />
-      </View>
-      <View style={styles.inputBox}>
-        <Text style={[styles.label, { color: labelColor }]}>
-          {label}
-          {required && <Text style={styles.required}> *</Text>}
-        </Text>
-        <TextInput
-          style={[styles.input, { color: inputColor }]}
-          placeholder={placeholder}
-          placeholderTextColor={placeholderColor}
-          value={value}
-          onChangeText={onChangeText}
-          keyboardType={keyboardType}
-          editable={editable}
-        />
-      </View>
-    </View>
+    <FloatingField
+      label={required ? `${label} *` : label}
+      icon={icon}
+      value={value}
+      onChangeText={onChangeText}
+      placeholder={placeholder}
+      keyboardType={keyboardType}
+      editable={editable}
+      autoCapitalize={autoCapitalize}
+      style={styles.field}
+    />
   );
 }
 
 const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    gap: 12,
-    alignItems: 'flex-start',
-  },
-  iconBox: {
-    width: 52,
-    height: 52,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-    marginTop: 2,
-  },
-  inputBox: {
-    flex: 1,
-    gap: 8,
-  },
-  label: {
-    fontFamily: FontFamily.medium,
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: '500',
-  },
-  required: {
-    color: '#ff0000',
-  },
-  input: {
-    fontFamily: FontFamily.regular,
-    fontSize: 14,
-    lineHeight: 20,
-    paddingVertical: 8,
-    paddingHorizontal: 0,
-    marginHorizontal: 0,
+  field: {
+    marginBottom: 4,
   },
 });

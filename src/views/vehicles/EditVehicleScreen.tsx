@@ -333,8 +333,8 @@ export function EditVehicleScreen({ vehicleId }: EditVehicleScreenProps) {
           <View style={formFieldStyles.formFields}>
             <View style={formFieldStyles.fieldRow}>
               <View style={formFieldStyles.fieldColumn}>
-                <FieldLabel label="Buying price" />
                 <FormTextInput
+                  label="Buying price"
                   value={form.buyingPrice}
                   onChangeText={(value) =>
                     updateField('buyingPrice', value.replace(/\D/g, ''))
@@ -343,8 +343,8 @@ export function EditVehicleScreen({ vehicleId }: EditVehicleScreenProps) {
                 />
               </View>
               <View style={formFieldStyles.fieldColumn}>
-                <FieldLabel label="Asking price" />
                 <FormTextInput
+                  label="Asking price"
                   value={form.askingPrice}
                   onChangeText={(value) =>
                     updateField('askingPrice', value.replace(/\D/g, ''))
@@ -375,16 +375,16 @@ export function EditVehicleScreen({ vehicleId }: EditVehicleScreenProps) {
 
             <View style={formFieldStyles.fieldRow}>
               <View style={formFieldStyles.fieldColumn}>
-                <FieldLabel label="Manufacturer" />
                 <FormTextInput
+                  label="Manufacturer"
                   value={form.manufacturer}
                   onChangeText={(value) => updateField('manufacturer', value)}
                   placeholder="Suzuki"
                 />
               </View>
               <View style={formFieldStyles.fieldColumn}>
-                <FieldLabel label="Model" />
                 <FormTextInput
+                  label="Model"
                   value={form.model}
                   onChangeText={(value) => updateField('model', value)}
                   placeholder="Swift Dzire VXI"
@@ -394,16 +394,16 @@ export function EditVehicleScreen({ vehicleId }: EditVehicleScreenProps) {
 
             <View style={formFieldStyles.fieldRow}>
               <View style={formFieldStyles.fieldColumn}>
-                <FieldLabel label="Variant" />
                 <FormTextInput
+                  label="Variant"
                   value={form.variant}
                   onChangeText={(value) => updateField('variant', value)}
                   placeholder="LE"
                 />
               </View>
               <View style={formFieldStyles.fieldColumn}>
-                <FieldLabel label="Color" />
                 <FormTextInput
+                  label="Color"
                   value={form.color}
                   onChangeText={(value) => updateField('color', value)}
                   placeholder="White"
@@ -421,8 +421,8 @@ export function EditVehicleScreen({ vehicleId }: EditVehicleScreenProps) {
                 />
               </View>
               <View style={formFieldStyles.fieldColumn}>
-                <FieldLabel label="Usage KM" />
                 <FormTextInput
+                  label="Usage KM"
                   value={form.usageKm}
                   onChangeText={(value) =>
                     updateField('usageKm', value.replace(/\D/g, '').slice(0, 7))
@@ -435,8 +435,8 @@ export function EditVehicleScreen({ vehicleId }: EditVehicleScreenProps) {
 
             <View style={formFieldStyles.fieldRow}>
               <View style={formFieldStyles.fieldColumn}>
-                <FieldLabel label="RTO code" />
                 <FormTextInput
+                  label="RTO code"
                   value={form.rtoCode}
                   onChangeText={(value) => updateField('rtoCode', value.toUpperCase())}
                   placeholder="AS-01"
@@ -455,8 +455,8 @@ export function EditVehicleScreen({ vehicleId }: EditVehicleScreenProps) {
             </View>
 
             <View style={formFieldStyles.fieldGroup}>
-              <FieldLabel label="Registration number" />
               <IconTextInput
+                label="Registration number"
                 icon="car-sport-outline"
                 value={form.registrationNumber}
                 editable={false}

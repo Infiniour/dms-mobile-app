@@ -1,6 +1,12 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo, type ReactNode } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { ThemeProvider, Stack } from 'expo-router';
+import {
+  MD3DarkTheme,
+  MD3LightTheme,
+  PaperProvider,
+  configureFonts,
+} from 'react-native-paper';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
@@ -12,12 +18,41 @@ import { DevApiErrorReporter } from '@/components/dev/DevApiErrorReporter';
 import { AppAlertProvider } from '@/components/ui';
 import { useNavigationTheme } from '@/hooks/useNavigationTheme';
 import { useSession } from '@/hooks/useSession';
+import { useTheme } from '@/hooks/useTheme';
 import { useAuthStore } from '@/store';
 
 // Stop off-screen tabs and stack screens from re-rendering while hidden.
 enableFreeze(true);
 
 SplashScreen.preventAutoHideAsync();
+
+const paperFonts = configureFonts({ config: { fontFamily: 'Poppins-Regular' } });
+
+function ThemedPaperProvider({ children }: { children: ReactNode }) {
+  const { colors, isDark } = useTheme();
+  const theme = useMemo(() => {
+    const base = isDark ? MD3DarkTheme : MD3LightTheme;
+
+    return {
+      ...base,
+      fonts: paperFonts,
+      colors: {
+        ...base.colors,
+        primary: colors.primary,
+        onPrimary: colors['on-primary'],
+        primaryContainer: colors['primary-container'],
+        background: colors.background,
+        surface: colors.background,
+        onSurface: colors['on-surface'],
+        onSurfaceVariant: colors['on-surface-variant'],
+        outline: colors.outline,
+        error: colors.error,
+      },
+    };
+  }, [colors, isDark]);
+
+  return <PaperProvider theme={theme}>{children}</PaperProvider>;
+}
 
 /**
  * The single place that decides which route group is reachable.
@@ -97,13 +132,15 @@ export default function RootLayout() {
     <GestureHandlerRootView style={styles.flex}>
       <SafeAreaProvider>
         <KeyboardProvider>
-          <ThemeProvider value={navigationTheme}>
-            <AppAlertProvider>
-              <StatusBar style={navigationTheme.isDark ? 'light' : 'dark'} />
-              <RootNavigator />
-              <DevApiErrorReporter />
-            </AppAlertProvider>
-          </ThemeProvider>
+          <ThemedPaperProvider>
+            <ThemeProvider value={navigationTheme}>
+              <AppAlertProvider>
+                <StatusBar style={navigationTheme.isDark ? 'light' : 'dark'} />
+                <RootNavigator />
+                <DevApiErrorReporter />
+              </AppAlertProvider>
+            </ThemeProvider>
+          </ThemedPaperProvider>
         </KeyboardProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

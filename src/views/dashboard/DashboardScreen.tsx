@@ -14,10 +14,9 @@ import { MetricGrid } from './components/MetricGrid';
 import { RangeFilter } from './components/RangeFilter';
 import { TopCategories } from './components/TopCategories';
 import {
-  categories,
-  expenseMetrics,
-  inventoryMetrics,
-  summaryMetrics,
+  expenseMetricShells,
+  inventoryMetricShells,
+  summaryMetricShells,
   timeRanges,
 } from './data';
 import type { CategoryStat, MetricStat, TimeRange } from './types';
@@ -56,7 +55,7 @@ export function DashboardScreen() {
   const fullName = useAuthStore((s) => s.fullName);
   const [selectedRange, setSelectedRange] = useState<TimeRange>('1W');
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
-  const firstName = fullName.trim().split(' ')[0] || 'Stevie';
+  const firstName = fullName.trim().split(' ')[0] || 'there';
   const horizontalPadding = screenWidth < 360 ? 16 : Grid.columns.margin;
   const cardGap = screenWidth < 360 ? 12 : Grid.columns.gutter;
   const contentWidth = screenWidth - horizontalPadding * 2;
@@ -67,7 +66,7 @@ export function DashboardScreen() {
   );
 
   const { isLoading: isDashboardLoading } = useTabDataFetch({
-    onFocus: async () => {
+    onFocus: async ({ isCancelled }) => {
       const showroomId = await resolvePrimaryShowroomId();
 
       const response = await getDashboard({
@@ -75,6 +74,10 @@ export function DashboardScreen() {
         showroomId,
       });
       const data = (response as unknown as DashboardResponse).data;
+
+      if (isCancelled()) {
+        return;
+      }
 
       if (__DEV__) {
         console.log('Dashboard response', response);
@@ -157,69 +160,71 @@ function getDashboardMetrics(data: DashboardData | null): {
   expenses: MetricStat[];
   categories: CategoryStat[];
 } {
+  // No API payload yet: keep card shells with empty values so loading skeletons
+  // (or blank cards) never flash fake demo numbers / trends.
   if (!data) {
     return {
-      summary: summaryMetrics,
-      inventory: inventoryMetrics,
-      expenses: expenseMetrics,
-      categories,
+      summary: summaryMetricShells.map((shell) => ({ ...shell, value: '' })),
+      inventory: inventoryMetricShells.map((shell) => ({ ...shell, value: '' })),
+      expenses: expenseMetricShells.map((shell) => ({ ...shell, value: '' })),
+      categories: [],
     };
   }
 
   return {
     summary: [
       {
-        ...summaryMetrics[0],
+        ...summaryMetricShells[0],
         value: formatCurrency(data.sales_summary?.net_profit),
       },
       {
-        ...summaryMetrics[1],
+        ...summaryMetricShells[1],
         value: formatNumber(data.sales_summary?.vehicles_sold),
       },
       {
-        ...summaryMetrics[2],
+        ...summaryMetricShells[2],
         value: formatShortCurrency(data.sales_summary?.average_profit_per_sale),
       },
       {
-        ...summaryMetrics[3],
+        ...summaryMetricShells[3],
         value: formatCurrency(data.sales_summary?.total_revenue),
       },
     ],
     inventory: [
       {
-        ...inventoryMetrics[0],
+        ...inventoryMetricShells[0],
         value: formatNumber(data.inventory_summary?.inventory_count),
       },
       {
-        ...inventoryMetrics[1],
+        ...inventoryMetricShells[1],
         value: formatShortCurrency(data.inventory_summary?.inventory_value),
       },
       {
-        ...inventoryMetrics[2],
+        ...inventoryMetricShells[2],
         value: formatNumber(data.inventory_summary?.dead_stock_count),
       },
       {
-        ...inventoryMetrics[3],
+        ...inventoryMetricShells[3],
         value: formatNumber(data.inventory_summary?.average_inventory_age_days),
       },
     ],
     expenses: [
       {
-        ...expenseMetrics[0],
+        ...expenseMetricShells[0],
         value: formatCurrency(data.expense_summary?.total_expenses),
       },
       {
-        ...expenseMetrics[1],
+        ...expenseMetricShells[1],
         value: formatCurrency(data.expense_summary?.average_expense_per_vehicle),
       },
     ],
-    categories: data.top_vehicle_types?.map((category) => ({
-      icon: getVehicleTypeIcon(category.vehicle_type),
-      name: formatVehicleType(category.vehicle_type),
-      description: 'Top performing type',
-      sold: `${formatNumber(category.vehicles_sold)} Sold`,
-      amount: formatCurrency(category.net_profit),
-    })) ?? [],
+    categories:
+      data.top_vehicle_types?.map((category) => ({
+        icon: getVehicleTypeIcon(category.vehicle_type),
+        name: formatVehicleType(category.vehicle_type),
+        sold: `${formatNumber(category.vehicles_sold)} Sold`,
+        amount: formatCurrency(category.net_profit),
+      })) ?? [],
   };
 }
 

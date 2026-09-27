@@ -45,13 +45,15 @@ export function TopCategories({ categories, loading }: TopCategoriesProps) {
               <Text style={[styles.categoryName, { color: colors['on-surface'] }]}>
                 {category.name}
               </Text>
-              <Text
-                style={[
-                  styles.categoryDescription,
-                  { color: colors['on-surface-variant'] },
-                ]}>
-                {category.description}
-              </Text>
+              {category.description ? (
+                <Text
+                  style={[
+                    styles.categoryDescription,
+                    { color: colors['on-surface-variant'] },
+                  ]}>
+                  {category.description}
+                </Text>
+              ) : null}
             </View>
 
             <View style={styles.categoryAmount}>

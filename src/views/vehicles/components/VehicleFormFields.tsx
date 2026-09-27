@@ -1,16 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import {
-  Animated,
   Pressable,
   ScrollView,
   Text,
-  TextInput,
   View,
   StyleSheet,
   useWindowDimensions,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { BottomSheet } from '@/components/ui';
+import { BottomSheet, FloatingField } from '@/components/ui';
 import { FontFamily, Typography } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 import type { SelectOption } from '../data';
@@ -25,54 +23,24 @@ export function FieldLabel({ label }: { label: string }) {
   );
 }
 
-export function FormTextInput({
-  style,
-  ...inputProps
-}: React.ComponentProps<typeof TextInput>) {
-  const { colors } = useTheme();
+type FormTextInputProps = Omit<
+  React.ComponentProps<typeof FloatingField>,
+  'label' | 'icon' | 'rightIcon'
+> & {
+  label: string;
+};
 
-  return (
-    <TextInput
-      {...inputProps}
-      placeholderTextColor={colors['on-surface-variant']}
-      style={[
-        Typography.body,
-        styles.formInput,
-        {
-          color: colors['on-surface'],
-          borderColor: colors.outline,
-          backgroundColor: colors.background,
-        },
-        style,
-      ]}
-    />
-  );
+export function FormTextInput({ label, style, ...inputProps }: FormTextInputProps) {
+  return <FloatingField label={label} {...inputProps} style={style} />;
 }
 
 export function IconTextInput({
   icon,
+  label,
   style,
   ...inputProps
-}: React.ComponentProps<typeof TextInput> & { icon: IconName }) {
-  const { colors } = useTheme();
-
-  return (
-    <View style={[styles.inputWrap, { borderColor: colors.primary }]}>
-      <Ionicons name={icon} size={23} color={colors.primary} />
-      <TextInput
-        {...inputProps}
-        placeholderTextColor={colors['on-surface-variant']}
-        style={[
-          Typography.body,
-          styles.input,
-          {
-            color: colors['on-surface'],
-          },
-          style,
-        ]}
-      />
-    </View>
-  );
+}: FormTextInputProps & { icon: IconName }) {
+  return <FloatingField label={label} icon={icon} {...inputProps} style={style} />;
 }
 
 type SelectFieldProps = {
@@ -85,14 +53,8 @@ type SelectFieldProps = {
 };
 
 /**
- * Same footprint as FormTextInput (height, radius, border) so it drops into
- * the same field grid, but opens a BottomSheet of fixed options instead of
- * the keyboard — for fields the API only accepts an exact enum value for.
- *
- * `label` floats the same way FloatingField's text-input label does: it sits
- * where a placeholder would when nothing is selected, then shrinks onto the
- * border once a value is chosen (or the sheet is open) — no separate
- * FieldLabel needed above this, same as the text fields beside it.
+ * Same Paper outlined size as FloatingField. Opens a sheet of fixed options
+ * instead of the keyboard — used wherever a form needs a dropdown.
  */
 export function SelectField({ label, value, options, onChange, searchable }: SelectFieldProps) {
   const { colors } = useTheme();
@@ -104,19 +66,7 @@ export function SelectField({ label, value, options, onChange, searchable }: Sel
     searchable && query.trim()
       ? options.filter((option) => option.label.toLowerCase().includes(query.trim().toLowerCase()))
       : options;
-  // Longer lists (e.g. year of manufacture, ~50 entries) need a capped,
-  // scrollable sheet instead of an unbounded View that runs off-screen.
   const isLongList = options.length > 6;
-  const isActive = isOpen || Boolean(selected);
-  const animation = useRef(new Animated.Value(isActive ? 1 : 0)).current;
-
-  useEffect(() => {
-    Animated.timing(animation, {
-      toValue: isActive ? 1 : 0,
-      duration: 150,
-      useNativeDriver: false,
-    }).start();
-  }, [animation, isActive]);
 
   const closeSheet = () => {
     setIsOpen(false);
@@ -125,37 +75,15 @@ export function SelectField({ label, value, options, onChange, searchable }: Sel
 
   return (
     <>
-      <Pressable
-        onPress={() => setIsOpen(true)}
-        style={[
-          styles.selectField,
-          {
-            borderColor: isOpen ? colors.primary : colors.outline,
-            backgroundColor: colors.background,
-          },
-        ]}>
-        <View style={styles.selectFieldTextArea}>
-          <Animated.Text
-            pointerEvents="none"
-            numberOfLines={1}
-            ellipsizeMode="tail"
-            style={[
-              styles.selectFloatLabel,
-              {
-                top: animation.interpolate({ inputRange: [0, 1], outputRange: [28, 8] }),
-                fontSize: animation.interpolate({ inputRange: [0, 1], outputRange: [15, 11] }),
-                color: isOpen ? colors.primary : colors['on-surface-variant'],
-              },
-            ]}>
-            {label}
-          </Animated.Text>
-          <Text
-            style={[Typography.body, styles.selectFieldText, { color: colors['on-surface'] }]}
-            numberOfLines={1}>
-            {selected?.label ?? ''}
-          </Text>
+      <Pressable onPress={() => setIsOpen(true)} accessibilityRole="button" accessibilityLabel={label}>
+        <View pointerEvents="none">
+          <FloatingField
+            label={label}
+            value={selected?.label ?? ''}
+            editable={false}
+            rightIcon="chevron-down"
+          />
         </View>
-        <Ionicons name="chevron-down" size={18} color={colors['on-surface-variant']} />
       </Pressable>
 
       <BottomSheet visible={isOpen} onClose={closeSheet}>
@@ -164,27 +92,16 @@ export function SelectField({ label, value, options, onChange, searchable }: Sel
         </Text>
 
         {searchable ? (
-          <View
-            style={[
-              styles.searchBox,
-              { borderColor: colors.outline, backgroundColor: colors.background },
-            ]}>
-            <Ionicons name="search" size={18} color={colors['on-surface-variant']} />
-            <TextInput
-              value={query}
-              onChangeText={setQuery}
-              placeholder={`Search ${label.toLowerCase()}`}
-              placeholderTextColor={colors['on-surface-variant']}
-              autoCapitalize="none"
-              autoCorrect={false}
-              style={[Typography.body, styles.searchInput, { color: colors['on-surface'] }]}
-            />
-            {query ? (
-              <Pressable onPress={() => setQuery('')} hitSlop={8}>
-                <Ionicons name="close-circle" size={18} color={colors['on-surface-variant']} />
-              </Pressable>
-            ) : null}
-          </View>
+          <FloatingField
+            label={`Search ${label.toLowerCase()}`}
+            value={query}
+            onChangeText={setQuery}
+            autoCapitalize="none"
+            autoCorrect={false}
+            rightIcon={query ? 'close-circle' : 'search'}
+            onRightIconPress={query ? () => setQuery('') : undefined}
+            style={styles.searchField}
+          />
         ) : null}
 
         {visibleOptions.length === 0 ? (
@@ -282,51 +199,17 @@ export const formFieldStyles = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
-  selectField: {
-    minHeight: 77,
-    borderRadius: 20,
-    borderWidth: 1.4,
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  selectFieldTextArea: {
-    flex: 1,
-    alignSelf: 'stretch',
-    justifyContent: 'center',
-  },
-  selectFloatLabel: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    fontFamily: FontFamily.medium,
-    includeFontPadding: false,
-  },
-  selectFieldText: {
+  fieldLabel: {
     fontSize: 15,
-    lineHeight: 22,
-    marginTop: 18,
+    lineHeight: 19,
+    fontFamily: FontFamily.medium,
   },
   sheetTitle: {
     textAlign: 'center',
     marginBottom: 20,
   },
-  searchBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    minHeight: 48,
-    borderRadius: 14,
-    borderWidth: 1.4,
-    paddingHorizontal: 14,
+  searchField: {
     marginBottom: 16,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 15,
-    padding: 0,
   },
   noResults: {
     textAlign: 'center',
@@ -336,8 +219,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   sheetOption: {
-    minHeight: 68,
-    borderRadius: 18,
+    minHeight: 56,
+    borderRadius: 16,
     borderWidth: 1,
     paddingHorizontal: 16,
     flexDirection: 'row',
@@ -353,36 +236,5 @@ const styles = StyleSheet.create({
   },
   sheetOptionLabel: {
     flex: 1,
-  },
-  fieldLabel: {
-    fontSize: 15,
-    lineHeight: 19,
-    fontFamily: FontFamily.medium,
-  },
-  formInput: {
-    minHeight: 77,
-    borderRadius: 20,
-    borderWidth: 1.4,
-    paddingHorizontal: 16,
-    paddingVertical: 0,
-    fontSize: 15,
-    lineHeight: 22,
-    fontFamily: Typography.body.fontFamily,
-  },
-  inputWrap: {
-    minHeight: 77,
-    borderRadius: 20,
-    borderWidth: 1.4,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 18,
-    paddingHorizontal: 20,
-  },
-  input: {
-    flex: 1,
-    fontSize: 15,
-    lineHeight: 22,
-    paddingVertical: 0,
-    fontFamily: Typography.body.fontFamily,
   },
 });

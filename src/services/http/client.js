@@ -110,9 +110,15 @@ httpClient.interceptors.response.use(
 
     if (response?.status === 401 && requiresAuth && !config._retry) {
       config._retry = true;
-      refreshPromise = refreshPromise ?? refreshAccessToken();
+      // Share one in-flight refresh across concurrent 401s. Clear only when that
+      // refresh settles — clearing after the first await let later 401s start a
+      // second refresh and break single-use refresh-token rotation.
+      if (!refreshPromise) {
+        refreshPromise = refreshAccessToken().finally(() => {
+          refreshPromise = null;
+        });
+      }
       const nextTokens = await refreshPromise;
-      refreshPromise = null;
 
       if (nextTokens) {
         config.headers.Authorization = `${nextTokens.tokenType} ${nextTokens.accessToken}`;

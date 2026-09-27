@@ -5,7 +5,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
   useWindowDimensions,
 } from 'react-native';
@@ -13,7 +12,7 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { Button } from '@/components/ui';
+import { Button, FloatingField } from '@/components/ui';
 import { Grid, Typography } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 import { addVehicleExpense } from '@/services';
@@ -201,60 +200,33 @@ export function AddExpenseScreen({
           </View>
 
           <View style={styles.fieldGroup}>
-            <FieldLabel label="Amount" />
-            <View style={[styles.amountWrap, { borderColor: colors.primary }]}>
-              <Text style={[styles.currency, { color: colors.primary }]}>₹</Text>
-              <TextInput
-                value={amount}
-                onChangeText={(value) => setAmount(formatAmount(value))}
-                placeholder="0"
-                placeholderTextColor={colors['on-surface-variant']}
-                keyboardType="number-pad"
-                editable={!isSaving}
-                style={[Typography.body, styles.amountInput, { color: colors['on-surface'] }]}
-              />
-            </View>
-          </View>
-
-          <View style={styles.fieldGroup}>
-            <FieldLabel label="Paid to" />
-            <TextInput
-              value={paidTo}
-              onChangeText={setPaidTo}
-              placeholder="e.g. City Motors"
-              placeholderTextColor={colors['on-surface-variant']}
+            <FloatingField
+              label="Amount (₹)"
+              value={amount}
+              onChangeText={(value) => setAmount(formatAmount(value))}
+              keyboardType="number-pad"
               editable={!isSaving}
-              style={[
-                Typography.body,
-                styles.input,
-                {
-                  color: colors['on-surface'],
-                  borderColor: colors.outline,
-                  backgroundColor: colors['surface-container-lowest'],
-                },
-              ]}
             />
           </View>
 
           <View style={styles.fieldGroup}>
-            <FieldLabel label="Description" />
-            <TextInput
+            <FloatingField
+              label="Paid to"
+              value={paidTo}
+              onChangeText={setPaidTo}
+              placeholder="e.g. City Motors"
+              editable={!isSaving}
+            />
+          </View>
+
+          <View style={styles.fieldGroup}>
+            <FloatingField
+              label="Description"
               value={description}
               onChangeText={setDescription}
               placeholder="e.g. Brake pad replacement"
-              placeholderTextColor={colors['on-surface-variant']}
               editable={!isSaving}
               multiline
-              style={[
-                Typography.body,
-                styles.input,
-                styles.textArea,
-                {
-                  color: colors['on-surface'],
-                  borderColor: colors.outline,
-                  backgroundColor: colors['surface-container-lowest'],
-                },
-              ]}
             />
           </View>
 

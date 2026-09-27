@@ -5,7 +5,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
   useWindowDimensions,
 } from 'react-native';
@@ -16,7 +15,7 @@ import { Typography, Grid } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 import { resolvePrimaryShowroomId } from '@/utils/showroom';
 import { updateShowroom, listShowrooms } from '@/services';
-import { BackButton, SkeletonBox } from '@/components/ui';
+import { BackButton, SkeletonBox, FloatingField } from '@/components/ui';
 
 type ShowroomData = {
   id?: number;
@@ -167,69 +166,30 @@ export function EditShowroomScreen() {
 
             {/* Form Fields */}
             <View style={styles.fieldsContainer}>
-          {/* Showroom Name */}
-          <View style={styles.fieldGroup}>
-            <Text style={[styles.fieldLabel, { color: colors['on-surface'] }]}>
-              Showroom name
-            </Text>
-            <View style={[styles.fieldInputWrapper, { borderColor: colors.outline }]}>
-              <Ionicons name="storefront-outline" size={20} color={colors.primary} />
-              <TextInput
-                style={[
-                  styles.fieldInput,
-                  { color: colors['on-surface'] },
-                ]}
-                placeholder="Enter showroom name"
-                placeholderTextColor={colors['on-surface-variant']}
-                value={showroomName}
-                onChangeText={setShowroomName}
-                editable={!isLoading}
-              />
-            </View>
-          </View>
+          <FloatingField
+            label="Showroom name"
+            icon="storefront-outline"
+            value={showroomName}
+            onChangeText={setShowroomName}
+            editable={!isLoading}
+          />
 
-          {/* Location */}
-          <View style={styles.fieldGroup}>
-            <Text style={[styles.fieldLabel, { color: colors['on-surface'] }]}>
-              Location
-            </Text>
-            <View style={[styles.fieldInputWrapper, { borderColor: colors.outline }]}>
-              <Ionicons name="location-outline" size={20} color={colors.primary} />
-              <TextInput
-                style={[
-                  styles.fieldInput,
-                  { color: colors['on-surface'] },
-                ]}
-                placeholder="Enter location"
-                placeholderTextColor={colors['on-surface-variant']}
-                value={location}
-                onChangeText={setLocation}
-                editable={!isLoading}
-              />
-            </View>
-          </View>
+          <FloatingField
+            label="Location"
+            icon="location-outline"
+            value={location}
+            onChangeText={setLocation}
+            editable={!isLoading}
+          />
 
-          {/* Contact Number */}
-          <View style={styles.fieldGroup}>
-            <Text style={[styles.fieldLabel, { color: colors['on-surface'] }]}>
-              Contact number
-            </Text>
-            <View style={[styles.fieldInputWrapper, { borderColor: colors.outline }]}>
-              <Ionicons name="call-outline" size={20} color={colors.primary} />
-              <TextInput
-                style={[
-                  styles.fieldInput,
-                  { color: colors['on-surface'] },
-                ]}
-                placeholder="Enter contact number"
-                placeholderTextColor={colors['on-surface-variant']}
-                value={contactNumber}
-                onChangeText={setContactNumber}
-                keyboardType="phone-pad"
-                editable={!isLoading}
-              />
-            </View>
-          </View>
+          <FloatingField
+            label="Contact number"
+            icon="call-outline"
+            value={contactNumber}
+            onChangeText={setContactNumber}
+            keyboardType="phone-pad"
+            editable={!isLoading}
+          />
 
           {/* GST Number */}
           <View style={styles.fieldGroup}>

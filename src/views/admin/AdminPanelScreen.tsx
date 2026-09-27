@@ -22,7 +22,7 @@ export function AdminPanelScreen() {
   const [employeeCount, setEmployeeCount] = useState<number | null>(null);
 
   const { isLoading } = useTabDataFetch({
-    onFocus: async () => {
+    onFocus: async ({ isCancelled }) => {
       const showroomId = await resolvePrimaryShowroomId();
 
       // Fetch dashboard data for this month
@@ -30,12 +30,20 @@ export function AdminPanelScreen() {
         duration: '1m',
         showroomId,
       });
+      if (isCancelled()) {
+        return;
+      }
+
       const dashData = (dashResponse as unknown as { data?: DashboardData })?.data;
       setDashboardData(dashData ?? null);
 
       // Fetch employee count
       if (showroomId) {
         const membersResponse = await listMembers({ showroomId });
+        if (isCancelled()) {
+          return;
+        }
+
         const total = (membersResponse as unknown as { data?: { total?: number } })?.data?.total;
         setEmployeeCount(typeof total === 'number' ? total : null);
       }

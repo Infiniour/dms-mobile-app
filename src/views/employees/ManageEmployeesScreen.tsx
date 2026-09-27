@@ -5,7 +5,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
   useWindowDimensions,
 } from 'react-native';
@@ -15,7 +14,7 @@ import { Typography, Grid } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 import { listMembers, addMember, removeMember, updateMemberRole } from '@/services';
 import { resolvePrimaryShowroomId } from '@/utils/showroom';
-import { SkeletonBox, BackButton, BottomSheet } from '@/components/ui';
+import { SkeletonBox, BackButton, BottomSheet, FloatingField } from '@/components/ui';
 import { useTabDataFetch } from '@/hooks/useTabDataFetch';
 import { PERMISSIONS, usePermissions, type PermissionCheck } from '@/permissions';
 
@@ -52,13 +51,19 @@ export function ManageEmployeesScreen() {
   const horizontalPadding = screenWidth < 360 ? 16 : Grid.columns.margin;
 
   const { isLoading, setIsLoading } = useTabDataFetch({
-    onFocus: async () => {
+    onFocus: async ({ isCancelled }) => {
       const showroomId = await resolvePrimaryShowroomId();
-      if (showroomId) {
-        const response = await listMembers({ showroomId });
-        const data = (response as unknown as MembersResponse)?.data;
-        setEmployees(data?.members ?? []);
+      if (!showroomId || isCancelled()) {
+        return;
       }
+
+      const response = await listMembers({ showroomId });
+      if (isCancelled()) {
+        return;
+      }
+
+      const data = (response as unknown as MembersResponse)?.data;
+      setEmployees(data?.members ?? []);
     },
   });
 
@@ -320,74 +325,40 @@ function AddEmployeeBottomSheet({
 
       {/* Form Section */}
       <View style={styles.formSection}>
-        {/* Name Input */}
         <View style={styles.inputGroup}>
-          <Text style={[styles.inputLabel, { color: colors['on-surface'] }]}>
-            Full Name *
-          </Text>
-          <TextInput
-            style={[
-              styles.input,
-              {
-                backgroundColor: colors['surface-container-lowest'],
-                borderColor: error ? colors.error : colors.outline,
-                color: colors['on-surface'],
-              },
-            ]}
-            placeholder="Enter full name"
-            placeholderTextColor={colors['on-surface-variant']}
+          <FloatingField
+            label="Full name"
             value={name}
             onChangeText={setName}
             editable={!isLoading}
+            autoCapitalize="words"
+            error={Boolean(error)}
           />
           <Text style={[styles.helperText, { color: colors['on-surface-variant'] }]}>
             Employee's full name
           </Text>
         </View>
 
-        {/* Country Code & Phone Number Row */}
         <View style={styles.phoneRow}>
           <View style={[styles.inputGroup, { flex: 1 }]}>
-            <Text style={[styles.inputLabel, { color: colors['on-surface'] }]}>
-              Country Code *
-            </Text>
-            <TextInput
-              style={[
-                styles.input,
-                {
-                  backgroundColor: colors['surface-container-lowest'],
-                  borderColor: error ? colors.error : colors.outline,
-                  color: colors['on-surface'],
-                },
-              ]}
-              placeholder="+91"
-              placeholderTextColor={colors['on-surface-variant']}
+            <FloatingField
+              label="Country code"
               value={countryCode}
               onChangeText={setCountryCode}
               keyboardType="number-pad"
               editable={!isLoading}
+              error={Boolean(error)}
             />
           </View>
 
           <View style={[styles.inputGroup, { flex: 1.5 }]}>
-            <Text style={[styles.inputLabel, { color: colors['on-surface'] }]}>
-              Phone Number *
-            </Text>
-            <TextInput
-              style={[
-                styles.input,
-                {
-                  backgroundColor: colors['surface-container-lowest'],
-                  borderColor: error ? colors.error : colors.outline,
-                  color: colors['on-surface'],
-                },
-              ]}
-              placeholder="Enter phone number"
-              placeholderTextColor={colors['on-surface-variant']}
+            <FloatingField
+              label="Phone number"
               value={phoneNumber}
               onChangeText={setPhoneNumber}
               keyboardType="phone-pad"
               editable={!isLoading}
+              error={Boolean(error)}
             />
           </View>
         </View>

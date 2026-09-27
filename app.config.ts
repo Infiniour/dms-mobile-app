@@ -10,13 +10,22 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   userInterfaceStyle: 'automatic',
   icon: './assets/icon.png',
 
+  experiments: {
+    reactCompiler: true,
+  },
+
   ios: {
     bundleIdentifier: 'org.name.dealermanagement',
     supportsTablet: true,
+    infoPlist: {
+      NSCameraUsageDescription:
+        'Dealer Management needs camera access so you can take showroom, vehicle, and document photos.',
+    },
   },
 
   android: {
     package: 'com.dealermanagement',
+    permissions: ['android.permission.CAMERA'],
     adaptiveIcon: {
       foregroundImage: './assets/icon.png',
       backgroundColor: '#f8f9ff',
@@ -25,6 +34,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
 
   plugins: [
     'expo-router',
+    '@maplibre/maplibre-react-native',
     'expo-secure-store',
     'expo-image',
     [
@@ -40,7 +50,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       'expo-location',
       {
         locationWhenInUsePermission:
-          'Dealer Management needs your location to auto-fill showroom address details.',
+          'Dealer Management uses your location to center the map when you pick your showroom.',
       },
     ],
     [

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { BottomSheet, Button } from '@/components/ui';
+import { BottomSheet, Button, FloatingField } from '@/components/ui';
 import { FontFamily, Typography } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 import { updateVehicleStatus } from '@/services';
@@ -153,21 +153,11 @@ export function ChangeStatusSheet({
         })}
       </View>
 
-      <TextInput
+      <FloatingField
+        label="Note (optional)"
         value={note}
         onChangeText={setNote}
-        placeholder="Add a note (optional)"
-        placeholderTextColor={colors['on-surface-variant']}
-        style={[
-          styles.noteInput,
-          {
-            backgroundColor: isDark
-              ? colors['surface-container-high']
-              : colors['surface-container-lowest'],
-            borderColor: colors['outline-variant'],
-            color: colors['on-surface'],
-          },
-        ]}
+        placeholder="Add a note"
       />
 
       <Text style={[styles.sellHint, { color: colors['on-surface-variant'] }]}>

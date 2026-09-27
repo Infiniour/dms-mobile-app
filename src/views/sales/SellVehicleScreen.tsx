@@ -6,14 +6,13 @@ import {
   Share,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { Button, useAppAlert } from '@/components/ui';
+import { Button, FloatingField, useAppAlert } from '@/components/ui';
 import { FormOutlinedInput } from '@/components/forms';
 import { FontFamily, Grid, Typography } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
@@ -571,45 +570,15 @@ function ChargeRow({
   /** Marks the one row that must be filled in, so it reads louder than the fees. */
   emphasis?: boolean;
 }) {
-  const { colors, isDark } = useTheme();
-  const [isFocused, setIsFocused] = useState(false);
-
   return (
-    <View style={styles.chargeRow}>
-      <Text
-        style={[
-          styles.chargeLabel,
-          emphasis && styles.chargeLabelEmphasis,
-          { color: emphasis ? colors['on-surface'] : colors['on-surface-variant'] },
-        ]}>
-        {label}
-      </Text>
-      {/* Boxed rather than bare: the row above it is read-only text, and an
-          unstyled input there was indistinguishable from a summary line. */}
-      <View
-        style={[
-          styles.chargeInputWrap,
-          {
-            backgroundColor: isDark
-              ? colors['surface-container-high']
-              : colors['surface-container'],
-            borderColor: isFocused ? colors.primary : 'transparent',
-          },
-        ]}>
-        <Text style={[styles.chargeCurrency, { color: colors['on-surface'] }]}>₹</Text>
-        <TextInput
-          value={formatAmountInput(value)}
-          onChangeText={(next) => onChangeText(next.replace(/\D/g, ''))}
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
-          placeholder="0"
-          placeholderTextColor={colors['on-surface-variant']}
-          keyboardType="numeric"
-          selectTextOnFocus
-          style={[styles.chargeInput, { color: colors['on-surface'] }]}
-        />
-      </View>
-    </View>
+    <FloatingField
+      label={emphasis ? `${label} *` : label}
+      value={formatAmountInput(value)}
+      onChangeText={(next) => onChangeText(next.replace(/\D/g, ''))}
+      keyboardType="numeric"
+      selectTextOnFocus
+      placeholder="0"
+    />
   );
 }
 
