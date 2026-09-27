@@ -1,10 +1,28 @@
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import {
+  ActivityIndicator,
+  Alert,
+  Linking,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BackButton } from '@/components/ui';
-import { Grid, Typography } from '@/constants/theme';
+import { FontFamily, Grid, Typography } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
-import { vehicleInventory } from './data';
+import { PERMISSIONS, usePermissions } from '@/permissions';
+import { ApiError, getVehicle } from '@/services';
+import { mapApiVehicleDetailToItem, toApiStatus, type ApiVehicleDetail } from './apiMapper';
+import { ChangeStatusSheet } from './components/ChangeStatusSheet';
+import { EditPricingSheet } from './components/EditPricingSheet';
+import { VehiclePhotoGallery } from './components/VehiclePhotoGallery';
 import type { VehicleDocument, VehicleExpense, VehicleItem, VehicleStatus } from './types';
 
 type VehicleDetailsScreenProps = {
@@ -12,12 +30,93 @@ type VehicleDetailsScreenProps = {
 };
 
 export function VehicleDetailsScreen({ vehicleId }: VehicleDetailsScreenProps) {
+  const router = useRouter();
   const { colors, isDark } = useTheme();
+  const { can } = usePermissions();
   const { width: screenWidth } = useWindowDimensions();
   const horizontalPadding = screenWidth < 360 ? 16 : Grid.columns.margin;
-  const vehicle = vehicleInventory.find((item) => item.id === vehicleId);
+  const [vehicle, setVehicle] = useState<VehicleItem | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [isStatusSheetOpen, setIsStatusSheetOpen] = useState(false);
+  const [isPricingSheetOpen, setIsPricingSheetOpen] = useState(false);
 
-  if (!vehicle) {
+  /**
+   * `silent` refetches in place after a write — a status change should update
+   * the badge without throwing the whole screen back to a spinner. A silent
+   * refetch also keeps the last good vehicle on screen if it fails, since the
+   * write itself already succeeded and reports its own errors.
+   */
+  const loadVehicle = useCallback(
+    async (options?: { silent?: boolean; isCancelled?: () => boolean }) => {
+      const silent = options?.silent ?? false;
+      const isCancelled = options?.isCancelled ?? (() => false);
+
+      if (!silent) {
+        setIsLoading(true);
+        setErrorMessage('');
+      }
+
+      try {
+        const response = await getVehicle({ vehicleId });
+
+        if (isCancelled()) {
+          return;
+        }
+
+        const responseData = response as unknown as { data?: ApiVehicleDetail };
+        const data = responseData?.data ?? (responseData as unknown as ApiVehicleDetail);
+        setVehicle(mapApiVehicleDetailToItem(data));
+      } catch (error) {
+        if (isCancelled() || silent) {
+          return;
+        }
+
+        const notFound = error instanceof ApiError && error.status === 404;
+        setErrorMessage(
+          notFound
+            ? 'This vehicle may have been removed from inventory.'
+            : error instanceof Error
+              ? error.message
+              : 'Unable to load this vehicle.'
+        );
+      } finally {
+        if (!silent && !isCancelled()) {
+          setIsLoading(false);
+        }
+      }
+    },
+    [vehicleId]
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+
+      loadVehicle({ isCancelled: () => cancelled });
+
+      return () => {
+        cancelled = true;
+      };
+    }, [loadVehicle])
+  );
+
+  if (isLoading) {
+    return (
+      <SafeAreaView
+        style={[styles.screen, { backgroundColor: colors.background }]}
+        edges={['top', 'bottom']}>
+        <View style={[styles.header, { paddingHorizontal: horizontalPadding }]}>
+          <BackButton />
+        </View>
+        <View style={styles.loading}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!vehicle || errorMessage) {
     return (
       <SafeAreaView
         style={[styles.screen, { backgroundColor: colors.background }]}
@@ -26,7 +125,7 @@ export function VehicleDetailsScreen({ vehicleId }: VehicleDetailsScreenProps) {
           <BackButton />
           <Text style={[styles.title, { color: colors['on-surface'] }]}>Vehicle not found</Text>
           <Text style={[styles.bodyText, { color: colors['on-surface-variant'] }]}>
-            This vehicle may have been removed from inventory.
+            {errorMessage || 'This vehicle may have been removed from inventory.'}
           </Text>
         </View>
       </SafeAreaView>
@@ -34,16 +133,145 @@ export function VehicleDetailsScreen({ vehicleId }: VehicleDetailsScreenProps) {
   }
 
   const statusColors = getStatusColors(vehicle.status, colors, isDark);
-  const heroBackground = isDark ? colors['surface-container-high'] : colors['surface-container-high'];
-  const cardBackground = colors['surface-container'];
-  const dividerColor = colors['outline-variant'];
+  const outlineCardBackground = colors['surface-container-lowest'];
+  const borderColor = colors.primary;
+  const dividerColor = colors.primary;
   const specs = getVehicleSpecs(vehicle);
+  // Optional sale fields are dropped rather than rendered as a label with an
+  // empty value, so the card only ever shows what was actually recorded.
+  const askingDelta = getAskingDelta(vehicle);
+  const saleRows = vehicle.sale
+    ? [
+        // Kept alongside the sale so a sold vehicle still shows what it was
+        // tagged at — formatted in full rupees to match, since `askingPrice`
+        // itself is the abbreviated "₹5.5L" form used on cards.
+        {
+          label: 'Asking price',
+          value:
+            vehicle.askingPriceAmount !== undefined
+              ? formatRupeeAmount(vehicle.askingPriceAmount)
+              : '',
+        },
+        { label: 'Sold for', value: vehicle.sale.soldPrice },
+        {
+          label: 'Difference',
+          value: askingDelta,
+          valueColor: askingDelta.includes('below') ? colors.error : colors.tertiary,
+        },
+        { label: 'Sale date', value: vehicle.sale.saleDate },
+        { label: 'Payment mode', value: vehicle.sale.paymentMode },
+        { label: 'Buyer', value: vehicle.sale.buyerName },
+        { label: 'Buyer phone', value: vehicle.sale.buyerPhone },
+        { label: 'Buyer address', value: vehicle.sale.buyerAddress },
+        { label: 'Sold by', value: vehicle.sale.soldBy },
+        { label: 'Remarks', value: vehicle.sale.remarks },
+      ].filter((row) => row.value.trim().length > 0)
+    : [];
+
+  // Against the real sale once there is one, so a sold vehicle stops reporting
+  // the margin it might have made. Cost-blind roles (employees) never see this.
+  const canSeeCost = can(PERMISSIONS.VEHICLE_COST_READ);
+  const profit = canSeeCost
+    ? vehicle.sale
+      ? getProfitNote(vehicle.buyingPrice, vehicle.sale.soldPrice)
+      : getProfitNote(vehicle.buyingPrice, vehicle.askingPrice)
+    : null;
+
+  // Shared by the action tile and the Add button on the expenses card so the two
+  // entry points cannot drift. Undefined when the user may not add expenses,
+  // which is what hides both.
+  const openAddExpense = can(PERMISSIONS.EXPENSE_CREATE)
+    ? () =>
+        router.push({
+          pathname: '/vehicle/expense/[id]',
+          // Carried along so the screen can name the vehicle without a second
+          // fetch just to render its header card.
+          params: {
+            id: vehicle.id,
+            name: vehicle.name,
+            registration: vehicle.registration,
+          },
+        })
+    : undefined;
+  const openDocuments = can(PERMISSIONS.VEHICLE_DOCUMENT_UPDATE)
+    ? () =>
+        router.push({
+          pathname: '/vehicle/documents/[id]',
+          params: {
+            id: vehicle.id,
+            name: vehicle.name,
+            registration: vehicle.registration,
+          },
+        })
+    : undefined;
+
+  const openSell =
+    !can(PERMISSIONS.SALE_CREATE) || vehicle.status === 'Sold'
+      ? undefined
+      : vehicle.status !== 'Available'
+        ? () =>
+            Alert.alert(
+              'Not ready to sell',
+              can(PERMISSIONS.VEHICLE_STATUS_UPDATE) || can(PERMISSIONS.VEHICLE_UPDATE)
+                ? 'Mark this vehicle "Available" from Change State before selling it.'
+                : 'This vehicle isn’t marked available yet. Ask a manager to update its state.'
+            )
+        : () =>
+            router.push({
+              pathname: '/vehicle/sell/[id]',
+              params: {
+                id: vehicle.id,
+                name: vehicle.name,
+                registration: vehicle.registration,
+              },
+            });
+
+  const canChangeStatus = can(PERMISSIONS.VEHICLE_STATUS_UPDATE) || can(PERMISSIONS.VEHICLE_UPDATE);
+
+  // Build from capabilities so employees get Status / Docs / Sell without core Edit.
   const actionItems = [
-    { label: 'Edit', icon: 'square-edit-outline' as const },
-    { label: 'Change status', icon: 'swap-horizontal' as const },
-    { label: 'Sell', icon: 'tag-outline' as const },
-    { label: 'Add Expense', icon: 'plus' as const },
+    ...(can(PERMISSIONS.VEHICLE_UPDATE)
+      ? [
+          {
+            label: 'Edit',
+            icon: 'square-edit-outline' as const,
+            onPress: () =>
+              router.push({ pathname: '/vehicle/edit/[id]', params: { id: vehicle.id } }),
+          },
+        ]
+      : []),
+    ...(canChangeStatus
+      ? [
+          {
+            label: 'Change State',
+            icon: 'swap-horizontal' as const,
+            onPress:
+              vehicle.status === 'Sold' ? undefined : () => setIsStatusSheetOpen(true),
+          },
+        ]
+      : []),
+    ...(can(PERMISSIONS.SALE_CREATE)
+      ? [
+          {
+            label: 'Sell',
+            icon: 'tag-outline' as const,
+            onPress: openSell,
+            muted: vehicle.status !== 'Sold' && vehicle.status !== 'Available',
+          },
+        ]
+      : []),
+    ...(openAddExpense ? [{ label: 'Add Expense', icon: 'plus' as const, onPress: openAddExpense }] : []),
   ];
+
+  // Engine/chassis/insurance_valid_till are not returned by the vehicle APIs
+  // yet — only show rows that actually have a value so the card isn't empty.
+  const moreInfoRows = [
+    { label: 'Engine number', value: vehicle.engineNumber },
+    { label: 'Chassis number', value: vehicle.chassisNumber },
+    { label: 'Transmission', value: vehicle.transmission },
+    { label: 'Color', value: vehicle.color },
+    { label: 'Insurance valid till', value: vehicle.insuranceValidTill },
+  ].filter((row) => row.value.trim().length > 0);
 
   return (
     <SafeAreaView
@@ -57,46 +285,19 @@ export function VehicleDetailsScreen({ vehicleId }: VehicleDetailsScreenProps) {
         style={styles.scroll}
         contentContainerStyle={[styles.content, { paddingHorizontal: horizontalPadding }]}
         showsVerticalScrollIndicator={false}>
-        <View style={[styles.heroCard, { backgroundColor: heroBackground }]}>
-          <MaterialCommunityIcons name={vehicle.icon} size={96} color={colors['on-surface-variant']} />
-          <View style={[styles.favoriteButton, { borderColor: colors.outline }]}>
-            <MaterialCommunityIcons name="heart-outline" size={16} color={colors.primary} />
-          </View>
-        </View>
-
-        <View style={styles.imageTabs}>
-          {[
-            { label: 'Front', icon: 'car-side' as const, active: true },
-            { label: 'Side', icon: 'car-estate' as const },
-            { label: 'Back', icon: 'car-back' as const },
-            { label: 'Interior', icon: 'steering' as const },
-          ].map((item) => (
-            <View
-              key={item.label}
-              style={[
-                styles.imageTab,
-                { backgroundColor: item.active ? colors['surface-container-high'] : cardBackground },
-              ]}>
-              <MaterialCommunityIcons
-                name={item.icon}
-                size={18}
-                color={item.active ? colors['on-surface'] : colors['on-surface-variant']}
-              />
-              <Text
-                style={[
-                  styles.imageTabLabel,
-                  { color: item.active ? colors['on-surface'] : colors['on-surface-variant'] },
-                ]}>
-                {item.label}
-              </Text>
-            </View>
-          ))}
-        </View>
+        <VehiclePhotoGallery
+          photos={
+            vehicle.photos?.length
+              ? vehicle.photos
+              : (vehicle.imageUrls ?? []).map((url) => ({ url, label: 'photo' }))
+          }
+          fallbackIcon={vehicle.icon}
+        />
 
         <View style={styles.titleRow}>
           <View style={styles.titleBlock}>
             <Text style={[styles.title, { color: colors['on-surface'] }]}>{vehicle.name}</Text>
-            <Text style={[styles.bodyText, { color: colors['on-surface-variant'] }]}>
+            <Text style={[styles.registrationText, { color: colors['on-surface'] }]}>
               {vehicle.registration}
             </Text>
           </View>
@@ -108,24 +309,90 @@ export function VehicleDetailsScreen({ vehicleId }: VehicleDetailsScreenProps) {
         </View>
 
         <View style={styles.priceGrid}>
-          <PriceCard label="Buying price" value={vehicle.buyingPrice} />
-          <PriceCard label="Asking price" value={vehicle.askingPrice} />
+          {canSeeCost ? (
+            <PriceCard
+              label="Buying price"
+              value={vehicle.buyingPrice}
+              onEdit={
+                can(PERMISSIONS.VEHICLE_UPDATE) && !vehicle.sale
+                  ? () => setIsPricingSheetOpen(true)
+                  : undefined
+              }
+            />
+          ) : null}
+          {vehicle.sale ? (
+            <PriceCard label="Sold for" value={vehicle.sale.soldPrice} note={profit} />
+          ) : (
+            <PriceCard
+              label="Asking price"
+              value={vehicle.askingPrice}
+              note={profit}
+              onEdit={
+                can(PERMISSIONS.VEHICLE_UPDATE)
+                  ? () => setIsPricingSheetOpen(true)
+                  : undefined
+              }
+            />
+          )}
         </View>
 
         <View style={styles.actionsGrid}>
-          {actionItems.map((item) => (
-            <View
-              key={item.label}
-              style={[styles.actionTile, { backgroundColor: colors['surface-container'] }]}>
-              <MaterialCommunityIcons name={item.icon} size={18} color={colors['on-surface']} />
-              <Text style={[styles.actionLabel, { color: colors['on-surface-variant'] }]}>
-                {item.label}
-              </Text>
-            </View>
-          ))}
+          {actionItems.map((item) => {
+            const isInert = !item.onPress;
+            // "muted" tiles still respond (to explain why), just don't look
+            // ready — distinct from truly inert ones (sold, no permission).
+            const looksDisabled = isInert || ('muted' in item && item.muted);
+            const tileColor = looksDisabled ? colors['on-surface-variant'] : colors.primary;
+
+            return (
+              <Pressable
+                key={item.label}
+                onPress={item.onPress}
+                disabled={isInert}
+                style={({ pressed }) => [
+                  styles.actionTile,
+                  {
+                    backgroundColor: outlineCardBackground,
+                    borderColor: looksDisabled ? colors['outline-variant'] : borderColor,
+                    opacity: looksDisabled ? 0.5 : 1,
+                  },
+                  pressed && item.onPress ? styles.actionTilePressed : null,
+                ]}>
+                <MaterialCommunityIcons name={item.icon} size={20} color={tileColor} />
+                <Text style={[styles.actionLabel, { color: looksDisabled ? tileColor : colors['on-surface'] }]}>
+                  {item.label}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
 
-        <View style={[styles.specPanel, { backgroundColor: cardBackground }]}>
+        {saleRows.length > 0 ? (
+          <>
+            <Text style={[styles.sectionKicker, { color: colors['on-surface-variant'] }]}>
+              SALE DETAILS
+            </Text>
+            <View style={[styles.infoCard, { backgroundColor: outlineCardBackground, borderColor }]}>
+              {saleRows.map((row, index) => (
+                <DetailRow
+                  key={row.label}
+                  label={row.label}
+                  value={row.value}
+                  valueColor={row.label === 'Buyer phone' ? colors.primary : row.valueColor}
+                  showDivider={index < saleRows.length - 1}
+                  dividerColor={dividerColor}
+                  onPress={
+                    row.label === 'Buyer phone'
+                      ? () => Linking.openURL(`tel:${row.value.replace(/[^\d+]/g, '')}`)
+                      : undefined
+                  }
+                />
+              ))}
+            </View>
+          </>
+        ) : null}
+
+        <View style={[styles.specPanel, { backgroundColor: outlineCardBackground, borderColor }]}>
           {specs.map((spec, index) => (
             <View
               key={spec.label}
@@ -138,7 +405,7 @@ export function VehicleDetailsScreen({ vehicleId }: VehicleDetailsScreenProps) {
                   borderRightWidth: index % 2 === 0 ? StyleSheet.hairlineWidth : 0,
                 },
               ]}>
-              <Text style={[styles.specLabel, { color: colors['on-surface-variant'] }]}>
+              <Text style={[styles.specLabel, { color: colors['on-surface'] }]}>
                 {spec.label}
               </Text>
               <Text style={[styles.specValue, { color: colors['on-surface'] }]}>
@@ -148,50 +415,103 @@ export function VehicleDetailsScreen({ vehicleId }: VehicleDetailsScreenProps) {
           ))}
         </View>
 
-        <View style={[styles.locationCard, { backgroundColor: cardBackground }]}>
-          <View>
-            <Text style={[styles.specLabel, { color: colors['on-surface-variant'] }]}>
-              Current location
+        {moreInfoRows.length > 0 ? (
+          <>
+            <Text style={[styles.sectionKicker, { color: colors['on-surface-variant'] }]}>
+              MORE INFO
             </Text>
-            <View style={styles.locationValue}>
-              <MaterialCommunityIcons name="map-marker" size={15} color={colors['on-surface']} />
-              <Text style={[styles.locationText, { color: colors['on-surface'] }]}>
-                {vehicle.lotLocation}
-              </Text>
+            <View style={[styles.infoCard, { backgroundColor: outlineCardBackground, borderColor }]}>
+              {moreInfoRows.map((row, index) => (
+                <DetailRow
+                  key={row.label}
+                  label={row.label}
+                  value={row.value}
+                  showDivider={index < moreInfoRows.length - 1}
+                  dividerColor={dividerColor}
+                />
+              ))}
             </View>
-          </View>
-          <MaterialCommunityIcons name="chevron-right" size={26} color={colors['on-surface']} />
+          </>
+        ) : null}
+
+        {canSeeCost ? (
+          <ExpenseSection expenses={vehicle.expenses} onAdd={openAddExpense} />
+        ) : null}
+
+        <View style={styles.documentsHeader}>
+          <Text style={[styles.sectionKicker, styles.documentsKicker, { color: colors['on-surface-variant'] }]}>
+            DOCUMENTS
+          </Text>
+          {openDocuments ? (
+            <Pressable onPress={openDocuments} hitSlop={8}>
+              <Text style={[styles.manageLink, { color: colors.primary }]}>Manage</Text>
+            </Pressable>
+          ) : null}
         </View>
 
-        <Text style={[styles.sectionKicker, { color: colors['on-surface-variant'] }]}>MORE INFO</Text>
-        <View style={[styles.infoCard, { backgroundColor: cardBackground }]}>
-          <DetailRow label="Engine number" value={vehicle.engineNumber} showDivider />
-          <DetailRow label="Chassis number" value={vehicle.chassisNumber} showDivider />
-          <DetailRow label="Transmission" value={vehicle.transmission} showDivider />
-          <DetailRow label="Color" value={vehicle.color} showDivider />
-          <DetailRow label="Insurance valid till" value={vehicle.insuranceValidTill} />
-        </View>
-
-        <ExpenseSection expenses={vehicle.expenses} />
-
-        <Text style={[styles.sectionKicker, { color: colors['on-surface-variant'] }]}>DOCUMENTS</Text>
         <View style={styles.documentList}>
           {vehicle.documents.map((document) => (
-            <DocumentRow key={document.label} document={document} />
+            <DocumentRow
+              key={document.type}
+              document={document}
+              onPress={openDocuments}
+            />
           ))}
         </View>
+
       </ScrollView>
+
+      <ChangeStatusSheet
+        visible={isStatusSheetOpen}
+        onClose={() => setIsStatusSheetOpen(false)}
+        vehicleId={vehicle.id}
+        currentStatus={toApiStatus(vehicle.status)}
+        onUpdated={() => loadVehicle({ silent: true })}
+      />
+
+      <EditPricingSheet
+        visible={isPricingSheetOpen}
+        onClose={() => setIsPricingSheetOpen(false)}
+        vehicleId={vehicle.id}
+        buyingPriceAmount={vehicle.buyingPriceAmount}
+        askingPriceAmount={vehicle.askingPriceAmount}
+        buyingDate={vehicle.buyingDate}
+        onUpdated={() => loadVehicle({ silent: true })}
+      />
     </SafeAreaView>
   );
 }
 
-function PriceCard({ label, value }: { label: string; value: string }) {
+function PriceCard({
+  label,
+  value,
+  note,
+  onEdit,
+}: {
+  label: string;
+  value: string;
+  note?: string | null;
+  /** Pencil opens inline pricing edit — omitted when the user cannot update. */
+  onEdit?: () => void;
+}) {
   const { colors } = useTheme();
 
   return (
-    <View style={[styles.priceCard, { backgroundColor: colors['surface-container'] }]}>
-      <Text style={[styles.priceLabel, { color: colors['on-surface-variant'] }]}>{label}</Text>
+    <View
+      style={[
+        styles.priceCard,
+        { backgroundColor: colors['surface-container'], borderColor: colors.primary },
+      ]}>
+      <View style={styles.priceCardHeader}>
+        <Text style={[styles.priceLabel, { color: colors['on-surface'] }]}>{label}</Text>
+        {onEdit ? (
+          <Pressable onPress={onEdit} hitSlop={10} accessibilityLabel={`Edit ${label}`}>
+            <Ionicons name="pencil" size={16} color={colors.primary} />
+          </Pressable>
+        ) : null}
+      </View>
       <Text style={[styles.priceValue, { color: colors['on-surface'] }]}>{value}</Text>
+      {note ? <Text style={[styles.priceNote, { color: colors.tertiary }]}>{note}</Text> : null}
     </View>
   );
 }
@@ -200,71 +520,173 @@ function DetailRow({
   label,
   value,
   showDivider,
+  dividerColor,
+  valueColor,
+  onPress,
 }: {
   label: string;
   value: string;
   showDivider?: boolean;
+  dividerColor?: string;
+  valueColor?: string;
+  /** e.g. tap-to-call on a phone number — the row stays plain text without it. */
+  onPress?: () => void;
 }) {
   const { colors } = useTheme();
 
   return (
-    <View
-      style={[
+    <Pressable
+      onPress={onPress}
+      disabled={!onPress}
+      style={({ pressed }) => [
         styles.detailRow,
         showDivider && {
-          borderBottomColor: colors['outline-variant'],
+          borderBottomColor: dividerColor ?? colors['outline-variant'],
           borderBottomWidth: StyleSheet.hairlineWidth,
         },
+        pressed && onPress ? { opacity: 0.7 } : null,
       ]}>
       <Text style={[styles.detailLabel, { color: colors['on-surface-variant'] }]}>{label}</Text>
-      <Text style={[styles.detailValue, { color: colors['on-surface'] }]}>{value}</Text>
-    </View>
+      <View style={styles.detailValueRow}>
+        <Text style={[styles.detailValue, { color: valueColor ?? colors['on-surface'] }]}>{value}</Text>
+        {onPress ? <Ionicons name="call" size={14} color={colors.primary} /> : null}
+      </View>
+    </Pressable>
   );
 }
 
-function ExpenseSection({ expenses }: { expenses: VehicleExpense[] }) {
+function ExpenseSection({
+  expenses,
+  onAdd,
+}: {
+  expenses: VehicleExpense[];
+  onAdd?: () => void;
+}) {
   const { colors } = useTheme();
   const total = expenses.reduce((sum, expense) => sum + parseRupeeAmount(expense.amount), 0);
 
   return (
-    <View style={[styles.expenseCard, { backgroundColor: colors['surface-container'] }]}>
+    <View
+      style={[
+        styles.expenseCard,
+        { backgroundColor: colors['surface-container-lowest'], borderColor: colors.primary },
+      ]}>
       <View style={styles.expenseHeader}>
         <Text style={[styles.sectionTitle, { color: colors['on-surface'] }]}>Vehicle Expenses</Text>
-        <View style={[styles.addSmallButton, { backgroundColor: colors['on-surface'] }]}>
-          <MaterialCommunityIcons name="plus" size={12} color={colors.background} />
-          <Text style={[styles.addSmallText, { color: colors.background }]}>Add</Text>
-        </View>
+        {onAdd ? (
+          <Pressable
+            onPress={onAdd}
+            hitSlop={8}
+            style={({ pressed }) => [
+              styles.addSmallButton,
+              { backgroundColor: colors['surface-container-high'], opacity: pressed ? 0.7 : 1 },
+            ]}>
+            <MaterialCommunityIcons name="plus" size={12} color={colors.primary} />
+            <Text style={[styles.addSmallText, { color: colors.primary }]}>Add</Text>
+          </Pressable>
+        ) : null}
       </View>
-      {expenses.map((expense) => (
-        <DetailRow key={expense.label} label={expense.label} value={expense.amount} showDivider />
-      ))}
-      <DetailRow label="Total expenses" value={formatRupeeAmount(total)} />
+      {expenses.length === 0 ? (
+        <Text style={[styles.expenseEmpty, { color: colors['on-surface-variant'] }]}>
+          No expenses logged for this vehicle yet.
+        </Text>
+      ) : (
+        expenses.map((expense) => (
+          // Keyed by id, not by text: several expenses can share a description
+          // and duplicate keys make React reuse the wrong rows.
+          <ExpenseRow key={expense.id} expense={expense} dividerColor={colors.primary} />
+        ))
+      )}
+      <DetailRow label="Total expenses" value={formatRupeeAmount(total)} valueColor={colors.error} />
     </View>
   );
 }
 
-function DocumentRow({ document }: { document: VehicleDocument }) {
+function ExpenseRow({
+  expense,
+  dividerColor,
+}: {
+  expense: VehicleExpense;
+  dividerColor: string;
+}) {
+  const { colors } = useTheme();
+  // "City Motors · 20 Jun 2026", dropping either half when it is missing.
+  const meta = [expense.paidTo, expense.date].filter(Boolean).join(' · ');
+
+  return (
+    <View
+      style={[
+        styles.expenseRow,
+        { borderBottomColor: dividerColor, borderBottomWidth: StyleSheet.hairlineWidth },
+      ]}>
+      {/* minWidth 0 lets a long description shrink instead of pushing the
+          amount out of the row entirely. */}
+      <View style={styles.expenseRowText}>
+        <Text style={[styles.expenseCategory, { color: colors['on-surface'] }]} numberOfLines={1}>
+          {expense.category}
+        </Text>
+        {meta ? (
+          <Text style={[styles.expenseMeta, { color: colors['on-surface-variant'] }]} numberOfLines={1}>
+            {meta}
+          </Text>
+        ) : null}
+        {expense.description ? (
+          <Text
+            style={[styles.expenseDescription, { color: colors['on-surface-variant'] }]}
+            numberOfLines={2}>
+            {expense.description}
+          </Text>
+        ) : null}
+      </View>
+      <Text style={[styles.expenseAmount, { color: colors['on-surface'] }]}>{expense.amount}</Text>
+    </View>
+  );
+}
+
+function DocumentRow({
+  document,
+  onPress,
+}: {
+  document: VehicleDocument;
+  /** Undefined for a viewer who may not edit — the row then just reports state. */
+  onPress?: () => void;
+}) {
   const { colors } = useTheme();
   const complete = document.status === 'complete';
 
   return (
-    <View style={[styles.documentRow, { backgroundColor: colors['surface-container'] }]}>
+    <Pressable
+      onPress={onPress}
+      disabled={!onPress}
+      style={({ pressed }) => [
+        styles.documentRow,
+        { backgroundColor: colors['surface-container-lowest'], borderColor: colors.primary },
+        pressed && onPress ? styles.actionTilePressed : null,
+      ]}>
       <View style={styles.documentTitle}>
-        <MaterialCommunityIcons
-          name="file-document-outline"
-          size={16}
-          color={colors['on-surface-variant']}
-        />
-        <Text style={[styles.documentLabel, { color: colors['on-surface'] }]}>
-          {document.label}
-        </Text>
+        <MaterialCommunityIcons name="file-document-outline" size={18} color={colors.primary} />
+        <View style={styles.documentTitleText}>
+          <Text
+            style={[styles.documentLabel, { color: colors['on-surface'] }]}
+            numberOfLines={1}
+            ellipsizeMode="tail">
+            {document.label}
+          </Text>
+          <Text style={[styles.documentMeta, { color: colors['on-surface-variant'] }]}>
+            {complete
+              ? `${document.count} page${document.count === 1 ? '' : 's'} uploaded`
+              : 'Not uploaded'}
+          </Text>
+        </View>
       </View>
-      <MaterialCommunityIcons
-        name={complete ? 'check' : 'alert-outline'}
-        size={19}
-        color={complete ? colors.tertiary : colors.error}
-      />
-    </View>
+      {complete ? (
+        <MaterialCommunityIcons name="check-circle" size={19} color={colors.tertiary} />
+      ) : onPress ? (
+        <MaterialCommunityIcons name="chevron-right" size={19} color={colors['on-surface-variant']} />
+      ) : (
+        <Text style={[styles.documentPending, { color: colors['on-surface-variant'] }]}>Pending</Text>
+      )}
+    </Pressable>
   );
 }
 
@@ -283,8 +705,67 @@ function parseRupeeAmount(amount: string) {
   return Number(amount.replace(/[₹,]/g, ''));
 }
 
+/** Blank when there is nothing to compare, or when it sold at exactly the asking price. */
+function getAskingDelta(vehicle: VehicleItem) {
+  const asking = vehicle.askingPriceAmount;
+  const sold = vehicle.sale?.soldPriceAmount;
+
+  if (asking === undefined || sold === undefined || asking === sold) {
+    return '';
+  }
+
+  const difference = sold - asking;
+  const formatted = formatRupeeAmount(Math.abs(difference));
+
+  return difference < 0 ? `${formatted} below asking` : `${formatted} above asking`;
+}
+
 function formatRupeeAmount(amount: number) {
   return `₹${amount.toLocaleString('en-IN')}`;
+}
+
+function parseLakhAmount(value: string) {
+  const match = value.replace(/[₹,\s]/g, '').match(/^([\d.]+)\s*([lLcC]?)/);
+
+  if (!match) {
+    return null;
+  }
+
+  const amount = Number(match[1]);
+
+  if (!Number.isFinite(amount)) {
+    return null;
+  }
+
+  const unit = match[2]?.toLowerCase();
+
+  if (unit === 'l') {
+    return amount * 100000;
+  }
+
+  if (unit === 'c') {
+    return amount * 10000000;
+  }
+
+  return amount;
+}
+
+function getProfitNote(buyingPrice: string, askingPrice: string) {
+  const buying = parseLakhAmount(buyingPrice);
+  const asking = parseLakhAmount(askingPrice);
+
+  if (buying === null || asking === null) {
+    return null;
+  }
+
+  const diff = asking - buying;
+
+  if (diff === 0) {
+    return null;
+  }
+
+  const formatted = `₹${Math.abs(diff).toLocaleString('en-IN')}`;
+  return diff > 0 ? `${formatted} profit` : `${formatted} loss`;
 }
 
 function getStatusColors(
@@ -294,16 +775,20 @@ function getStatusColors(
 ) {
   const variants = {
     Available: {
-      backgroundColor: isDark ? colors['tertiary-container'] : colors['tertiary-fixed'],
-      textColor: isDark ? colors['on-tertiary-container'] : colors['on-tertiary-fixed'],
+      backgroundColor: colors['surface-container-high'],
+      textColor: colors.primary,
     },
     Sold: {
       backgroundColor: colors['error-container'],
       textColor: colors['on-error-container'],
     },
-    'In Repair': {
+    'In Garage': {
       backgroundColor: colors['surface-container-high'],
       textColor: colors['on-surface-variant'],
+    },
+    Inspection: {
+      backgroundColor: colors['secondary-container'],
+      textColor: colors['on-secondary-container'],
     },
   };
 
@@ -323,47 +808,18 @@ const styles = StyleSheet.create({
   scroll: {
     flex: 1,
   },
+  loading: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   content: {
     paddingBottom: 31,
     paddingTop: 17,
   },
-  heroCard: {
-    height: 177,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  favoriteButton: {
-    position: 'absolute',
-    right: 13,
-    top: 13,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  imageTabs: {
-    flexDirection: 'row',
-    gap: 9,
-    marginTop: 12,
-  },
-  imageTab: {
-    flex: 1,
-    height: 47,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  imageTabLabel: {
-    ...Typography.micro,
-    marginTop: 2,
-  },
   titleRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: 12,
     marginTop: 17,
@@ -372,9 +828,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   title: {
-    ...Typography.title,
-    fontSize: 19,
-    lineHeight: 24,
+    fontFamily: Typography.screenTitle.fontFamily,
+    fontSize: 24,
+    lineHeight: 29,
+  },
+  registrationText: {
+    fontFamily: FontFamily.regular,
+    fontSize: 17,
+    lineHeight: 21,
+    marginTop: 2,
   },
   bodyText: {
     ...Typography.body,
@@ -383,15 +845,14 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   statusPill: {
-    borderRadius: 20,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
+    borderRadius: 30,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
   statusText: {
-    ...Typography.caption,
-    fontFamily: Typography.screenTitle.fontFamily,
-    fontSize: 8,
-    lineHeight: 10,
+    fontFamily: FontFamily.medium,
+    fontSize: 10,
+    lineHeight: 12,
   },
   priceGrid: {
     flexDirection: 'row',
@@ -400,21 +861,36 @@ const styles = StyleSheet.create({
   },
   priceCard: {
     flex: 1,
-    height: 83,
+    minHeight: 92,
     borderRadius: 10,
+    borderWidth: 0.5,
     justifyContent: 'center',
     paddingHorizontal: 15,
+    paddingVertical: 12,
+  },
+  priceCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
   },
   priceLabel: {
-    ...Typography.caption,
-    fontSize: 10,
-    lineHeight: 12,
+    fontFamily: FontFamily.regular,
+    fontSize: 13,
+    lineHeight: 16,
+    flexShrink: 1,
   },
   priceValue: {
-    ...Typography.title,
+    fontFamily: FontFamily.medium,
     fontSize: 24,
-    lineHeight: 31,
-    marginTop: 5,
+    lineHeight: 29,
+    marginTop: 4,
+  },
+  priceNote: {
+    fontFamily: FontFamily.regular,
+    fontSize: 11,
+    lineHeight: 14,
+    marginTop: 4,
   },
   actionsGrid: {
     flexDirection: 'row',
@@ -423,148 +899,215 @@ const styles = StyleSheet.create({
   },
   actionTile: {
     flex: 1,
-    height: 69,
-    borderRadius: 10,
+    height: 65,
+    borderRadius: 15,
+    borderWidth: 0.5,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 4,
   },
+  actionTilePressed: {
+    opacity: 0.85,
+  },
   actionLabel: {
-    ...Typography.micro,
-    fontSize: 8,
-    lineHeight: 10,
-    marginTop: 7,
+    fontFamily: FontFamily.regular,
+    fontSize: 10,
+    lineHeight: 12,
+    marginTop: 6,
     textAlign: 'center',
   },
   specPanel: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    borderRadius: 10,
+    borderRadius: 15,
+    borderWidth: 0.5,
     marginTop: 13,
     overflow: 'hidden',
   },
   specCell: {
     width: '50%',
-    minHeight: 73,
+    minHeight: 82,
     paddingHorizontal: 17,
-    paddingVertical: 14,
+    paddingVertical: 16,
   },
   specLabel: {
-    ...Typography.caption,
-    fontSize: 9,
-    lineHeight: 11,
+    fontFamily: FontFamily.regular,
+    fontSize: 11,
+    lineHeight: 13,
   },
   specValue: {
-    ...Typography.screenTitle,
-    fontSize: 11,
-    lineHeight: 14,
+    fontFamily: FontFamily.regular,
+    fontSize: 15,
+    lineHeight: 18,
     marginTop: 8,
   },
-  locationCard: {
-    borderRadius: 10,
-    minHeight: 63,
-    marginTop: 13,
-    paddingHorizontal: 15,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  locationValue: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    marginTop: 7,
-  },
-  locationText: {
-    ...Typography.body,
-    fontSize: 12,
-    lineHeight: 15,
-  },
   sectionKicker: {
-    ...Typography.caption,
-    fontFamily: Typography.screenTitle.fontFamily,
-    fontSize: 10,
-    lineHeight: 13,
+    fontFamily: FontFamily.medium,
+    fontSize: 14,
+    lineHeight: 17,
     marginBottom: 9,
     marginTop: 17,
   },
   infoCard: {
-    borderRadius: 10,
+    borderRadius: 20,
+    borderWidth: 0.5,
     overflow: 'hidden',
   },
   sectionTitle: {
-    ...Typography.screenTitle,
-    fontSize: 12,
-    lineHeight: 15,
+    fontFamily: FontFamily.medium,
+    fontSize: 15,
+    lineHeight: 18,
   },
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 16,
-    paddingHorizontal: 15,
-    minHeight: 44,
+    paddingHorizontal: 20,
+    minHeight: 51,
     alignItems: 'center',
     paddingVertical: 12,
   },
   detailLabel: {
-    ...Typography.caption,
-    fontSize: 10,
-    lineHeight: 13,
+    fontFamily: FontFamily.regular,
+    fontSize: 14,
+    lineHeight: 17,
+    // Without these a long label takes the whole row and pushes the value
+    // off the edge instead of wrapping.
+    flexShrink: 1,
+    minWidth: 0,
   },
   detailValue: {
-    ...Typography.caption,
-    fontFamily: Typography.screenTitle.fontFamily,
-    fontSize: 10,
-    lineHeight: 13,
-    flexShrink: 1,
+    fontFamily: FontFamily.medium,
+    fontSize: 15,
+    lineHeight: 18,
+    flexShrink: 0,
     textAlign: 'right',
   },
+  detailValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 0,
+  },
   expenseCard: {
-    borderRadius: 10,
+    borderRadius: 20,
+    borderWidth: 0.5,
     marginTop: 18,
     overflow: 'hidden',
   },
   expenseHeader: {
-    minHeight: 42,
+    minHeight: 51,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 15,
+    paddingHorizontal: 20,
   },
   addSmallButton: {
-    height: 24,
+    height: 25,
     minWidth: 62,
-    borderRadius: 12,
+    borderRadius: 20,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 3,
+    gap: 5,
+    paddingHorizontal: 14,
   },
   addSmallText: {
-    ...Typography.caption,
     fontFamily: Typography.screenTitle.fontFamily,
-    fontSize: 10,
+    fontSize: 12,
+  },
+  expenseRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+  },
+  expenseRowText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 3,
+  },
+  expenseCategory: {
+    fontFamily: Typography.screenTitle.fontFamily,
+    fontSize: 14,
+    lineHeight: 18,
+  },
+  expenseMeta: {
+    fontFamily: FontFamily.regular,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  expenseDescription: {
+    fontFamily: FontFamily.regular,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  expenseAmount: {
+    fontFamily: Typography.screenTitle.fontFamily,
+    fontSize: 14,
+    lineHeight: 18,
+    flexShrink: 0,
+    fontVariant: ['tabular-nums'],
+  },
+  expenseEmpty: {
+    fontFamily: FontFamily.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+  },
+  documentsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  documentsKicker: {
+    flex: 1,
+  },
+  manageLink: {
+    ...Typography.caption,
+    fontFamily: FontFamily.medium,
+    fontSize: 12,
+  },
+  documentTitleText: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
+  },
+  documentMeta: {
+    ...Typography.caption,
+    fontSize: 11,
   },
   documentList: {
     gap: 10,
   },
   documentRow: {
-    height: 47,
-    borderRadius: 10,
-    paddingHorizontal: 15,
+    height: 59,
+    borderRadius: 15,
+    borderWidth: 0.5,
+    paddingHorizontal: 20,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   documentTitle: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    marginRight: 16,
   },
   documentLabel: {
-    ...Typography.screenTitle,
-    fontSize: 12,
-    lineHeight: 15,
+    fontFamily: FontFamily.regular,
+    fontSize: 15,
+    lineHeight: 18,
+  },
+  documentPending: {
+    ...Typography.caption,
+    fontSize: 11,
   },
   missingContent: {
     flex: 1,

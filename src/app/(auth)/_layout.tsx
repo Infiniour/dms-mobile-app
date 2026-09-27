@@ -1,6 +1,8 @@
 import { Stack } from 'expo-router';
 import { useNavigationTheme } from '@/hooks/useNavigationTheme';
 
+// Gating (which group is even reachable) happens once in the root layout via
+// Stack.Protected — this layout only has to lay out its own screens.
 export default function AuthLayout() {
   const navigationTheme = useNavigationTheme();
 
@@ -12,7 +14,6 @@ export default function AuthLayout() {
       }}>
       <Stack.Screen name="index" />
       <Stack.Screen name="login" />
-      <Stack.Screen name="profile" />
     </Stack>
   );
 }

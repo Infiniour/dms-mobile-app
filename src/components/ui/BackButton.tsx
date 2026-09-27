@@ -13,9 +13,20 @@ export function BackButton({ onPress }: BackButtonProps) {
   const { colors, isDark } = useTheme();
   const contentColor = isDark ? colors['on-surface'] : colors.primary;
 
+  const handlePress = () => {
+    if (onPress) {
+      onPress();
+      return;
+    }
+
+    if (router.canGoBack()) {
+      router.back();
+    }
+  };
+
   return (
     <Pressable
-      onPress={onPress ?? (() => router.back())}
+      onPress={handlePress}
       style={({ pressed }) => [styles.back, { opacity: pressed ? 0.7 : 1 }]}
       hitSlop={8}>
       <Ionicons name="arrow-back" size={18} color={contentColor} />

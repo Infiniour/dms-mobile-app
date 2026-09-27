@@ -7,7 +7,7 @@ export type MetricVariant = 'primary' | 'surface' | 'blue' | 'green' | 'danger';
 export type MetricStat = {
   title: string;
   value: string;
-  detail: string;
+  detail?: string;
   icon: DashboardIconName;
   variant?: MetricVariant;
   compact?: boolean;
@@ -18,7 +18,7 @@ export type MetricStat = {
 export type CategoryStat = {
   icon: DashboardIconName;
   name: string;
-  description: string;
+  description?: string;
   sold: string;
   amount: string;
 };

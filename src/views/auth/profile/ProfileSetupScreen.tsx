@@ -1,68 +1,176 @@
-import { useState } from 'react';
-import { View, Text, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRef, useState } from 'react';
+import {
+  Alert,
+  Keyboard,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useLogout } from '@/hooks/useLogout';
 import { useTheme } from '@/hooks/useTheme';
 import { Typography, Grid } from '@/constants/theme';
-import { Button, TextField } from '@/components/ui';
+import { Button, FloatingField, type FloatingFieldHandle } from '@/components/ui';
 import { useAuthStore } from '@/store';
+import { getProfile, updateProfile } from '@/services';
+import { resolveSetupDestination } from '@/utils/setupRouting';
+
+type ProfileResponse = {
+  data?: Parameters<typeof resolveSetupDestination>[0] & {
+    name?: string | null;
+    country_code?: string | null;
+    phone_number?: string | null;
+  };
+};
 
 export function ProfileSetupScreen() {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
-  const completeProfile = useAuthStore((s) => s.completeProfile);
-  const [fullName, setFullName] = useState('');
+  const { isLoggingOut, logout } = useLogout();
+  const setStoredFullName = useAuthStore((s) => s.setFullName);
+  const setCanEnterApp = useAuthStore((s) => s.setCanEnterApp);
+  const setProfileContact = useAuthStore((s) => s.setProfileContact);
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const lastNameRef = useRef<FloatingFieldHandle>(null);
+  const canContinue = firstName.trim().length > 0 && lastName.trim().length > 0;
 
-  const handleContinue = () => {
-    completeProfile(fullName.trim());
-    router.replace('/(app)');
+  const handleLogout = () => {
+    Keyboard.dismiss();
+    Alert.alert('Log out?', 'You can finish setting up your profile later.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Log Out', style: 'destructive', onPress: logout },
+    ]);
+  };
+
+  const handleContinue = async () => {
+    const nextName = [firstName.trim(), lastName.trim()].filter(Boolean).join(' ');
+
+    if (!nextName || !canContinue || isSaving) {
+      return;
+    }
+
+    Keyboard.dismiss();
+    setErrorMessage('');
+    setIsSaving(true);
+
+    try {
+      await updateProfile({ name: nextName });
+      setStoredFullName(nextName);
+
+      const response = await getProfile();
+      const profile = (response as unknown as ProfileResponse).data;
+
+      if (!profile) {
+        throw new Error('Profile data missing from server response.');
+      }
+
+      setProfileContact({
+        countryCode: profile.country_code ?? undefined,
+        phoneNumber: profile.phone_number ?? undefined,
+      });
+
+      const destination = resolveSetupDestination(profile);
+      setCanEnterApp(destination.canEnterApp);
+      router.replace(destination.href);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to update profile.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
     <SafeAreaView
       style={[styles.screen, { backgroundColor: colors.background }]}
-      edges={['top', 'bottom']}>
-      <KeyboardAvoidingView
+      edges={['top']}>
+      <KeyboardAwareScrollView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={styles.content}>
+        mode="layout"
+        bottomOffset={24}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}>
+        <View style={styles.form}>
           <View style={styles.header}>
+          <View style={styles.titleRow}>
             <Text style={[Typography.hero, styles.title, { color: colors['on-background'] }]}>
               Welcome!
             </Text>
-            <Text
-              style={[
-                Typography.body,
-                styles.subtitle,
-                { color: colors['on-surface-variant'] },
+            <Pressable
+              onPress={handleLogout}
+              disabled={isLoggingOut}
+              hitSlop={8}
+              style={({ pressed }) => [
+                styles.logoutButton,
+                {
+                  borderColor: colors.outline,
+                  opacity: pressed || isLoggingOut ? 0.6 : 1,
+                },
               ]}>
-              Set up your profile to get started
-            </Text>
+              <Ionicons name="log-out-outline" size={16} color={colors['on-surface-variant']} />
+            </Pressable>
           </View>
-
-          <TextField
-            label="Full name"
-            labelIcon={
-              <Ionicons name="person-outline" size={14} color={colors.primary} />
-            }
-            value={fullName}
-            onChangeText={setFullName}
-            placeholder="Enter your name"
-            autoComplete="name"
-            textContentType="name"
-            autoCapitalize="words"
-          />
-
-          <View style={styles.footer}>
-            <Button
-              label="Continue to Dashboard"
-              onPress={handleContinue}
-              disabled={fullName.trim().length === 0}
-            />
-          </View>
+          <Text
+            style={[
+              Typography.body,
+              styles.subtitle,
+              { color: colors['on-surface-variant'] },
+            ]}>
+            Set up your profile to get started
+          </Text>
         </View>
-      </KeyboardAvoidingView>
+
+        <View style={styles.fields}>
+          <FloatingField
+            label="First name"
+            value={firstName}
+            onChangeText={setFirstName}
+            autoComplete="given-name"
+            textContentType="givenName"
+            autoCapitalize="words"
+            autoCorrect={false}
+            returnKeyType="next"
+            blurOnSubmit={false}
+            onSubmitEditing={() => lastNameRef.current?.focus()}
+          />
+          <FloatingField
+            ref={lastNameRef}
+            label="Last name"
+            value={lastName}
+            onChangeText={setLastName}
+            autoComplete="family-name"
+            textContentType="familyName"
+            autoCapitalize="words"
+            autoCorrect={false}
+            returnKeyType="done"
+            onSubmitEditing={handleContinue}
+          />
+        </View>
+
+        {errorMessage ? (
+          <Text style={[Typography.caption, styles.errorText, { color: colors.error }]}>
+            {errorMessage}
+          </Text>
+        ) : null}
+        </View>
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+          <Button
+            label="Continue"
+            onPress={handleContinue}
+            disabled={!canContinue || isSaving}
+            loading={isSaving}
+          />
+        </View>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }
@@ -74,12 +182,28 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1,
   },
-  content: {
-    flex: 1,
+  scrollContent: {
+    flexGrow: 1,
     paddingHorizontal: Grid.columns.margin,
     paddingTop: 50,
-    paddingBottom: 24,
+  },
+  form: {
+    flexGrow: 1,
     gap: 24,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  logoutButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   header: {
     gap: 15,
@@ -92,7 +216,14 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
     lineHeight: 20,
   },
+  fields: {
+    gap: 20,
+  },
   footer: {
-    marginTop: 'auto',
+    paddingTop: 10,
+  },
+  errorText: {
+    marginTop: -12,
+    lineHeight: 17,
   },
 });

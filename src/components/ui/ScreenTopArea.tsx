@@ -6,6 +6,8 @@ import { useTheme } from '@/hooks/useTheme';
 type MaterialIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 type IonIconName = React.ComponentProps<typeof Ionicons>['name'];
 
+import { Pressable } from 'react-native';
+
 type ScreenTopAreaProps = {
   title: string;
   eyebrow?: string;
@@ -13,6 +15,7 @@ type ScreenTopAreaProps = {
   subtitle: string;
   leadingIcon?: MaterialIconName;
   trailingIcon?: IonIconName;
+  onNotificationPress?: () => void;
 };
 
 export function ScreenTopArea({
@@ -22,6 +25,7 @@ export function ScreenTopArea({
   subtitle,
   leadingIcon = 'storefront-outline',
   trailingIcon = 'notifications-outline',
+  onNotificationPress,
 }: ScreenTopAreaProps) {
   const { colors, isDark } = useTheme();
   const actionBackground = isDark ? colors['secondary-container'] : colors.primary;
@@ -44,9 +48,14 @@ export function ScreenTopArea({
           ) : null}
         </View>
 
-        <View style={[styles.notificationButton, { backgroundColor: actionBackground }]}>
+        <Pressable
+          onPress={onNotificationPress}
+          style={({ pressed }) => [
+            styles.notificationButton,
+            { backgroundColor: actionBackground, opacity: pressed ? 0.7 : 1 },
+          ]}>
           <Ionicons name={trailingIcon} size={23} color={actionContent} />
-        </View>
+        </Pressable>
       </View>
 
       <View style={styles.hero}>

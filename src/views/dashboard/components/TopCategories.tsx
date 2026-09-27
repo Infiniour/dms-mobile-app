@@ -29,6 +29,8 @@ export function TopCategories({ categories, loading }: TopCategoriesProps) {
       <View style={styles.categoryList}>
         {loading
           ? skeletonRows.map((row) => <CategoryRowSkeleton key={row} />)
+          : categories.length === 0
+            ? <EmptyCategoryState />
           : categories.map((category) => (
           <View key={category.name} style={styles.categoryRow}>
             <View
@@ -43,13 +45,15 @@ export function TopCategories({ categories, loading }: TopCategoriesProps) {
               <Text style={[styles.categoryName, { color: colors['on-surface'] }]}>
                 {category.name}
               </Text>
-              <Text
-                style={[
-                  styles.categoryDescription,
-                  { color: colors['on-surface-variant'] },
-                ]}>
-                {category.description}
-              </Text>
+              {category.description ? (
+                <Text
+                  style={[
+                    styles.categoryDescription,
+                    { color: colors['on-surface-variant'] },
+                  ]}>
+                  {category.description}
+                </Text>
+              ) : null}
             </View>
 
             <View style={styles.categoryAmount}>
@@ -64,6 +68,29 @@ export function TopCategories({ categories, loading }: TopCategoriesProps) {
             ))}
       </View>
     </>
+  );
+}
+
+function EmptyCategoryState() {
+  const { colors } = useTheme();
+
+  return (
+    <View
+      style={[
+        styles.emptyState,
+        {
+          backgroundColor: colors['surface-container-low'],
+          borderColor: colors['outline-variant'],
+        },
+      ]}>
+      <MaterialCommunityIcons name="chart-box-outline" size={22} color={colors.primary} />
+      <Text style={[styles.emptyTitle, { color: colors['on-surface'] }]}>
+        No top categories yet
+      </Text>
+      <Text style={[styles.emptySubtitle, { color: colors['on-surface-variant'] }]}>
+        Sales data will appear here after vehicles are sold.
+      </Text>
+    </View>
   );
 }
 
@@ -141,5 +168,25 @@ const styles = StyleSheet.create({
   },
   categorySkeletonDetail: {
     marginTop: 8,
+  },
+  emptyState: {
+    minHeight: 126,
+    borderRadius: 18,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  emptyTitle: {
+    ...Typography.screenTitle,
+    fontSize: 15,
+    lineHeight: 20,
+    marginTop: 10,
+  },
+  emptySubtitle: {
+    ...Typography.body,
+    textAlign: 'center',
+    lineHeight: 18,
+    marginTop: 6,
   },
 });

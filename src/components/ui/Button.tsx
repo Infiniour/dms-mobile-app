@@ -1,4 +1,5 @@
 import {
+  ActivityIndicator,
   Pressable,
   StyleSheet,
   Text,
@@ -15,6 +16,7 @@ type ButtonProps = Omit<PressableProps, 'children' | 'style'> & {
   label: string;
   variant?: ButtonVariant;
   fullWidth?: boolean;
+  loading?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -23,6 +25,7 @@ export function Button({
   variant = 'primary',
   fullWidth = true,
   disabled,
+  loading = false,
   style,
   ...pressableProps
 }: ButtonProps) {
@@ -49,7 +52,7 @@ export function Button({
   return (
     <Pressable
       {...pressableProps}
-      disabled={disabled}
+      disabled={disabled || loading}
       style={({ pressed }) => [
         styles.button,
         fullWidth && styles.fullWidth,
@@ -61,6 +64,13 @@ export function Button({
         variant === 'outline' && styles.outline,
         style,
       ]}>
+      {loading ? (
+        <ActivityIndicator
+          size="small"
+          color={variantStyles.textColor}
+          style={styles.loader}
+        />
+      ) : null}
       <Text
         style={[
           Typography.button,
@@ -79,6 +89,8 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
   },
   fullWidth: {
     width: '100%',
@@ -89,5 +101,8 @@ const styles = StyleSheet.create({
   label: {
     fontFamily: Typography.button.fontFamily,
     fontWeight: '600',
+  },
+  loader: {
+    transform: [{ scale: 0.85 }],
   },
 });

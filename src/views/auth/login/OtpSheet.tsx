@@ -4,14 +4,25 @@ import { Ionicons } from '@expo/vector-icons';
 import { Typography } from '@/constants/theme';
 import { BottomSheet, Button, OtpInput } from '@/components/ui';
 import { useTheme } from '@/hooks/useTheme';
+import { setTokens, verifyOtp } from '@/services';
 
 const RESEND_SECONDS = 28;
+
+type VerifyOtpData = {
+  accessToken?: string;
+  refreshToken?: string;
+  expiresIn?: number;
+  tokenType?: string;
+  required_name?: boolean;
+};
 
 type OtpSheetProps = {
   visible: boolean;
   phoneNumber: string;
+  requestId: string;
+  initialOtp?: string;
   onClose: () => void;
-  onVerify: (otp: string) => void;
+  onVerify: (data: VerifyOtpData) => void;
 };
 
 function maskPhoneNumber(phone: string) {
@@ -24,40 +35,75 @@ function maskPhoneNumber(phone: string) {
   return `+91 XXXXX X${digits.slice(-4)}`;
 }
 
-export function OtpSheet({ visible, phoneNumber, onClose, onVerify }: OtpSheetProps) {
+export function OtpSheet({
+  visible,
+  phoneNumber,
+  requestId,
+  initialOtp = '',
+  onClose,
+  onVerify,
+}: OtpSheetProps) {
   const { colors, isDark } = useTheme();
   const [otp, setOtp] = useState('');
   const [secondsLeft, setSecondsLeft] = useState(RESEND_SECONDS);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  // Drives OtpInput's autoFocus. Set from the sheet's real onDidPresent
+  // event rather than visible, since visible flips true as soon as
+  // present() is called — before the native sheet's presentation animation
+  // has actually finished and its content can accept keyboard focus.
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
+
+  useEffect(() => {
+    if (!visible) {
+      setIsSheetOpen(false);
+      return;
+    }
+
+    setOtp(initialOtp.replace(/\D/g, '').slice(0, 6));
+    setErrorMessage('');
+    setSecondsLeft(RESEND_SECONDS);
+  }, [initialOtp, visible]);
 
   useEffect(() => {
     if (!visible) {
       return;
     }
 
-    setOtp('');
-    setSecondsLeft(RESEND_SECONDS);
-  }, [visible]);
-
-  useEffect(() => {
-    if (!visible || secondsLeft <= 0) {
-      return;
-    }
-
     const timer = setInterval(() => {
-      setSecondsLeft((current) => current - 1);
+      setSecondsLeft((current) => (current > 0 ? current - 1 : 0));
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [visible, secondsLeft]);
+  }, [visible]);
 
-  const handleVerify = () => {
-    if (otp.length === 6) {
-      onVerify(otp);
+  const handleVerify = async () => {
+    if (otp.length !== 6 || !requestId || isVerifying) {
+      return;
+    }
+
+    setErrorMessage('');
+    setIsVerifying(true);
+
+    try {
+      const response = await verifyOtp({ requestId, otpCode: otp });
+      const data = response?.data ?? response;
+
+      if (!data?.accessToken || !data?.refreshToken) {
+        throw new Error('Verification succeeded but no session was returned. Please try again.');
+      }
+
+      await setTokens(data);
+      onVerify(data);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to verify OTP.');
+    } finally {
+      setIsVerifying(false);
     }
   };
 
   return (
-    <BottomSheet visible={visible} onClose={onClose}>
+    <BottomSheet visible={visible} onClose={onClose} onOpen={() => setIsSheetOpen(true)}>
       <View style={styles.header}>
         <Pressable
           onPress={onClose}
@@ -90,7 +136,7 @@ export function OtpSheet({ visible, phoneNumber, onClose, onVerify }: OtpSheetPr
       </Text>
 
       <View style={styles.otpInput}>
-        <OtpInput value={otp} onChange={setOtp} autoFocus={visible} />
+        <OtpInput value={otp} onChange={setOtp} autoFocus={isSheetOpen} />
       </View>
 
       <Text style={[Typography.body, styles.resend, { color: colors['on-surface-variant'] }]}>
@@ -100,7 +146,18 @@ export function OtpSheet({ visible, phoneNumber, onClose, onVerify }: OtpSheetPr
         </Text>
       </Text>
 
-      <Button label="Verify" onPress={handleVerify} disabled={otp.length !== 6} />
+      {errorMessage ? (
+        <Text style={[Typography.caption, styles.errorText, { color: colors.error }]}>
+          {errorMessage}
+        </Text>
+      ) : null}
+
+      <Button
+        label="Verify"
+        onPress={handleVerify}
+        disabled={otp.length !== 6 || !requestId || isVerifying}
+        loading={isVerifying}
+      />
     </BottomSheet>
   );
 }
@@ -133,5 +190,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 24,
     lineHeight: 20,
+  },
+  errorText: {
+    textAlign: 'center',
+    marginBottom: 16,
+    lineHeight: 17,
   },
 });

@@ -16,9 +16,11 @@ export function OtpInput({ value, onChange, autoFocus }: OtpInputProps) {
   const inputRef = useRef<TextInput>(null);
 
   useEffect(() => {
+    // The caller now flips autoFocus true only once its sheet has actually
+    // finished presenting (see OtpSheet's onOpen), so there's no longer a
+    // timing race to guess around with a delay.
     if (autoFocus) {
-      const timer = setTimeout(() => inputRef.current?.focus(), 300);
-      return () => clearTimeout(timer);
+      inputRef.current?.focus();
     }
   }, [autoFocus]);
 
@@ -75,12 +77,13 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     width: '100%',
-    gap: 8,
+    gap: 6,
   },
   cell: {
     flex: 1,
-    height: 52,
-    borderRadius: 20,
+    minWidth: 0,
+    height: 48,
+    borderRadius: 18,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',

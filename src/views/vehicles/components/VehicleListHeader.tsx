@@ -4,38 +4,32 @@ import { useTheme } from '@/hooks/useTheme';
 import type { VehicleCategory } from '../types';
 
 type VehicleListHeaderProps = {
-  selectedCategory: VehicleCategory;
+  selectedCategory?: VehicleCategory | null;
   count: number;
 };
 
 export function VehicleListHeader({ selectedCategory, count }: VehicleListHeaderProps) {
   const { colors } = useTheme();
+  const displayCategory = selectedCategory ? selectedCategory.toUpperCase() : 'ALL';
 
   return (
     <View style={styles.sectionHeader}>
       <Text style={[styles.sectionTitle, { color: colors['on-surface'] }]}>
-        {selectedCategory.toUpperCase()} · {count} VEHICLES
+        {displayCategory} · {count} VEHICLES
       </Text>
-      <Text style={[styles.sectionCount, { color: colors.primary }]}>See all</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 20,
+    marginBottom: 16,
+    marginTop: 8,
   },
   sectionTitle: {
     ...Typography.screenTitle,
-    fontSize: 16,
-    lineHeight: 20,
-  },
-  sectionCount: {
-    ...Typography.body,
-    fontFamily: Typography.screenTitle.fontFamily,
-    lineHeight: 16,
+    fontSize: 15,
+    lineHeight: 18,
+    fontWeight: '600',
   },
 });

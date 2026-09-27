@@ -82,7 +82,7 @@ export function MetricCard({
                 {trend}
               </Text>
             </View>
-          ) : (
+          ) : detail ? (
             <Text
               style={[
                 styles.cardDetail,
@@ -91,7 +91,7 @@ export function MetricCard({
               ]}>
               {detail}
             </Text>
-          )}
+          ) : null}
         </>
       )}
     </View>

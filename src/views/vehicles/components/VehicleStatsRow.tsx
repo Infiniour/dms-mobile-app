@@ -43,13 +43,16 @@ function getStatColor(
 const styles = StyleSheet.create({
   statsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 25,
-    marginBottom: 24,
+    // Left-aligned with a fixed gap rather than space-between: the row now
+    // holds two or three tiles, and space-between pushed them to the screen
+    // edges with a hole in the middle.
+    gap: 32,
+    marginTop: 22,
+    marginBottom: 20,
   },
   statItem: {
-    alignItems: 'center',
-    minWidth: 58,
+    alignItems: 'flex-start',
+    minWidth: 52,
   },
   statValue: {
     ...Typography.title,

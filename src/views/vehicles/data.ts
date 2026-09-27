@@ -1,199 +1,115 @@
-import type { VehicleCategoryTab, VehicleItem, VehicleStat, VehicleStatusFilter } from './types';
+import type { MaterialCommunityIcons } from '@expo/vector-icons';
 
-export const vehicleStatusFilters: VehicleStatusFilter[] = ['All', 'Available', 'Sold', 'In Repair'];
+export type SelectOption = {
+  value: string;
+  label: string;
+  icon?: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+};
 
-export const vehicleCategoryTabs: VehicleCategoryTab[] = [
-  { label: 'Cars', value: 'Cars', count: 24, icon: 'car-sports' },
-  { label: 'Bikes', value: 'Bikes', count: 14, icon: 'motorbike' },
-  { label: 'Scooty', value: 'Scooty', count: 7, icon: 'scooter' },
+export type ExpenseType =
+  | 'repair'
+  | 'service'
+  | 'insurance'
+  | 'tax'
+  | 'inspection'
+  | 'cleaning'
+  | 'documentation'
+  | 'other';
+
+export type ExpenseCategory = {
+  value: ExpenseType;
+  label: string;
+  icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+};
+
+// The API only accepts these eight values, so the chips are the enum itself
+// rather than a friendlier set that would fail validation on submit.
+export const expenseCategoryOptions: ExpenseCategory[] = [
+  { value: 'repair', label: 'Repair', icon: 'wrench-outline' },
+  { value: 'service', label: 'Service', icon: 'car-wrench' },
+  { value: 'insurance', label: 'Insurance', icon: 'shield-check-outline' },
+  { value: 'tax', label: 'Tax', icon: 'receipt' },
+  { value: 'inspection', label: 'Inspection', icon: 'clipboard-check-outline' },
+  { value: 'cleaning', label: 'Cleaning', icon: 'spray-bottle' },
+  { value: 'documentation', label: 'Papers', icon: 'file-document-outline' },
+  { value: 'other', label: 'Other', icon: 'dots-horizontal' },
 ];
 
-export const vehicleStats: VehicleStat[] = [
-  { value: '24', label: 'Total', tone: 'default' },
-  { value: '16', label: 'Available', tone: 'success' },
-  { value: '3', label: 'Dead stock', tone: 'danger' },
-  { value: '₹68L', label: 'Stock value', tone: 'primary' },
+// Confirmed against the API: ApiVehicle['vehicle_type'] is 'car' | 'bike' | 'scooty'.
+export const vehicleTypeOptions: SelectOption[] = [
+  { value: 'car', label: 'Car', icon: 'car-hatchback' },
+  { value: 'bike', label: 'Bike', icon: 'motorbike' },
+  { value: 'scooty', label: 'Scooty', icon: 'scooter' },
 ];
 
-export const vehicleInventory: VehicleItem[] = [
-  {
-    id: '1',
-    name: 'Swift Dzire VXI',
-    category: 'Cars',
-    registration: 'AS01 AB 1234',
-    price: '₹5.3L',
-    buyingPrice: '₹4.83L',
-    askingPrice: '₹5.20L',
-    status: 'Available',
-    meta: '2020 · 45K km · Petrol',
-    note: '12 days in lot',
-    icon: 'car-hatchback',
-    owner: '2nd owner',
-    color: 'Pearl White',
-    engineNumber: 'K12B1234567',
-    chassisNumber: 'MA3FJEB1S00123456',
-    transmission: 'Manual',
-    insuranceValidTill: 'Mar 2027',
-    lotLocation: 'Main Showroom',
-    expenses: [
-      { label: 'Brake pad replacement', amount: '₹3,200' },
-      { label: 'Painting & Polish', amount: '₹5,300' },
-    ],
-    documents: [
-      { label: 'RC Book', status: 'complete' },
-      { label: 'Insurance', status: 'complete' },
-      { label: 'PUC Certificate', status: 'missing' },
-      { label: 'NOC / Transfer Papers', status: 'missing' },
-    ],
-  },
-  {
-    id: '2',
-    name: 'Hyundai i20 Asta',
-    category: 'Cars',
-    registration: 'AS01 CD 5678',
-    price: '₹6.8L',
-    buyingPrice: '₹6.10L',
-    askingPrice: '₹6.80L',
-    status: 'Sold',
-    meta: '2019 · 62K km · Diesel',
-    note: 'Sold 3 days ago',
-    icon: 'car-sports',
-    owner: '1st owner',
-    color: 'Blue',
-    engineNumber: 'D4FB5678123',
-    chassisNumber: 'MALBM51RLKM567812',
-    transmission: 'Manual',
-    insuranceValidTill: 'Jan 2027',
-    lotLocation: 'Main Showroom',
-    expenses: [
-      { label: 'Interior cleaning', amount: '₹1,800' },
-      { label: 'Tyre alignment', amount: '₹2,200' },
-    ],
-    documents: [
-      { label: 'RC Book', status: 'complete' },
-      { label: 'Insurance', status: 'complete' },
-      { label: 'PUC Certificate', status: 'complete' },
-      { label: 'NOC / Transfer Papers', status: 'complete' },
-    ],
-  },
-  {
-    id: '3',
-    name: 'Honda City ZX',
-    category: 'Cars',
-    registration: 'AS02 EF 9012',
-    price: '₹9.1L',
-    buyingPrice: '₹8.45L',
-    askingPrice: '₹9.10L',
-    status: 'In Repair',
-    meta: '2018 · 78K km · Petrol',
-    note: '28 days in lot',
-    icon: 'car-side',
-    owner: '2nd owner',
-    color: 'Silver',
-    engineNumber: 'L15Z9012456',
-    chassisNumber: 'MAKGM662J90124567',
-    transmission: 'Manual',
-    insuranceValidTill: 'Aug 2026',
-    lotLocation: 'Workshop Bay',
-    expenses: [
-      { label: 'Suspension work', amount: '₹6,800' },
-      { label: 'Dent repair', amount: '₹4,900' },
-    ],
-    documents: [
-      { label: 'RC Book', status: 'complete' },
-      { label: 'Insurance', status: 'complete' },
-      { label: 'PUC Certificate', status: 'missing' },
-      { label: 'NOC / Transfer Papers', status: 'missing' },
-    ],
-  },
-  {
-    id: '4',
-    name: 'Tata Nexon XZ+',
-    category: 'Cars',
-    registration: 'AS03 GH 3456',
-    price: '₹5.3L',
-    buyingPrice: '₹4.75L',
-    askingPrice: '₹5.30L',
-    status: 'Available',
-    meta: '2021 · 32K km · Petrol',
-    note: '68 days in lot',
-    icon: 'car-estate',
-    owner: '1st owner',
-    color: 'Grey',
-    engineNumber: 'REVTRN3456123',
-    chassisNumber: 'MAT627165MG345612',
-    transmission: 'Manual',
-    insuranceValidTill: 'May 2027',
-    lotLocation: 'Main Showroom',
-    expenses: [
-      { label: 'Polish', amount: '₹2,500' },
-      { label: 'Seat cover', amount: '₹3,800' },
-    ],
-    documents: [
-      { label: 'RC Book', status: 'complete' },
-      { label: 'Insurance', status: 'complete' },
-      { label: 'PUC Certificate', status: 'complete' },
-      { label: 'NOC / Transfer Papers', status: 'missing' },
-    ],
-  },
-  {
-    id: '5',
-    name: 'Royal Enfield Classic',
-    category: 'Bikes',
-    registration: 'AS04 JK 7788',
-    price: '₹1.6L',
-    buyingPrice: '₹1.35L',
-    askingPrice: '₹1.60L',
-    status: 'Available',
-    meta: '2021 · 18K km · Petrol',
-    note: '8 days in lot',
-    icon: 'motorbike',
-    owner: '1st owner',
-    color: 'Black',
-    engineNumber: 'UCE3507788123',
-    chassisNumber: 'ME3U3S5CML778812',
-    transmission: 'Manual',
-    insuranceValidTill: 'Dec 2026',
-    lotLocation: 'Bike Section',
-    expenses: [
-      { label: 'Chain service', amount: '₹1,200' },
-      { label: 'Polish', amount: '₹900' },
-    ],
-    documents: [
-      { label: 'RC Book', status: 'complete' },
-      { label: 'Insurance', status: 'complete' },
-      { label: 'PUC Certificate', status: 'missing' },
-      { label: 'NOC / Transfer Papers', status: 'missing' },
-    ],
-  },
-  {
-    id: '6',
-    name: 'TVS Jupiter ZX',
-    category: 'Scooty',
-    registration: 'AS05 LM 3344',
-    price: '₹62K',
-    buyingPrice: '₹52K',
-    askingPrice: '₹62K',
-    status: 'In Repair',
-    meta: '2022 · 9K km · Petrol',
-    note: 'Service pending',
-    icon: 'scooter',
-    owner: '1st owner',
-    color: 'Pearl White',
-    engineNumber: 'JF21E3344567',
-    chassisNumber: 'MD626AG42N334456',
-    transmission: 'Automatic',
-    insuranceValidTill: 'Jul 2027',
-    lotLocation: 'Service Area',
-    expenses: [
-      { label: 'Brake service', amount: '₹1,600' },
-      { label: 'Battery check', amount: '₹700' },
-    ],
-    documents: [
-      { label: 'RC Book', status: 'complete' },
-      { label: 'Insurance', status: 'complete' },
-      { label: 'PUC Certificate', status: 'missing' },
-      { label: 'NOC / Transfer Papers', status: 'missing' },
-    ],
-  },
+// NOT confirmed against the backend — the API docs only show one example value
+// each ('petrol', 'manual'), not a full enum. If a save fails with an
+// unrecognized value, add it here; every screen picks it up from this list.
+export const fuelTypeOptions: SelectOption[] = [
+  { value: 'petrol', label: 'Petrol' },
+  { value: 'diesel', label: 'Diesel' },
+  { value: 'cng', label: 'CNG' },
+  { value: 'electric', label: 'Electric' },
 ];
+
+export const transmissionTypeOptions: SelectOption[] = [
+  { value: 'manual', label: 'Manual' },
+  { value: 'automatic', label: 'Automatic' },
+];
+
+// Full names, matching what the API expects for registration_state
+// (confirmed against create-vehicle/update-vehicle docs, e.g. "Karnataka").
+const INDIAN_STATES_AND_UTS = [
+  'Andhra Pradesh',
+  'Arunachal Pradesh',
+  'Assam',
+  'Bihar',
+  'Chhattisgarh',
+  'Goa',
+  'Gujarat',
+  'Haryana',
+  'Himachal Pradesh',
+  'Jharkhand',
+  'Karnataka',
+  'Kerala',
+  'Madhya Pradesh',
+  'Maharashtra',
+  'Manipur',
+  'Meghalaya',
+  'Mizoram',
+  'Nagaland',
+  'Odisha',
+  'Punjab',
+  'Rajasthan',
+  'Sikkim',
+  'Tamil Nadu',
+  'Telangana',
+  'Tripura',
+  'Uttar Pradesh',
+  'Uttarakhand',
+  'West Bengal',
+  'Andaman and Nicobar Islands',
+  'Chandigarh',
+  'Dadra and Nagar Haveli and Daman and Diu',
+  'Delhi',
+  'Jammu and Kashmir',
+  'Ladakh',
+  'Lakshadweep',
+  'Puducherry',
+];
+
+export const indianStateOptions: SelectOption[] = INDIAN_STATES_AND_UTS.map((name) => ({
+  value: name,
+  label: name,
+}));
+
+const CURRENT_YEAR = new Date().getFullYear();
+
+// Descending so the most likely year (recent) is at the top of the sheet.
+export const yearOfManufactureOptions: SelectOption[] = Array.from(
+  { length: CURRENT_YEAR - 1980 + 2 },
+  (_, index) => {
+    const year = CURRENT_YEAR + 1 - index;
+    return { value: String(year), label: String(year) };
+  }
+);

@@ -1,16 +1,25 @@
 import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text } from 'react-native';
 import { Typography } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 
-export function AddVehicleButton() {
+type AddVehicleButtonProps = {
+  onPress?: () => void;
+};
+
+export function AddVehicleButton({ onPress }: AddVehicleButtonProps) {
   const { colors } = useTheme();
 
   return (
-    <View style={[styles.addButton, { borderColor: colors.primary }]}>
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.addButton,
+        { borderColor: colors.primary, opacity: pressed ? 0.8 : 1 },
+      ]}>
       <Ionicons name="add" size={24} color={colors.primary} />
       <Text style={[styles.addText, { color: colors.primary }]}>Add new vehicle</Text>
-    </View>
+    </Pressable>
   );
 }
 
