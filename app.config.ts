@@ -4,7 +4,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: 'Dealer Management',
   slug: 'dealer_management',
-  version: '1.0.0',
+  version: '0.1.0',
   scheme: 'dealermanagement',
   orientation: 'portrait',
   userInterfaceStyle: 'automatic',
@@ -17,6 +17,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     bundleIdentifier: 'org.name.dealermanagement',
     supportsTablet: true,
+    buildNumber: '001',
     infoPlist: {
       NSCameraUsageDescription:
         'Dealer Management needs camera access so you can take showroom, vehicle, and document photos.',
@@ -25,6 +26,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
 
   android: {
     package: 'com.dealermanagement',
+    versionCode: 1,
     permissions: ['android.permission.CAMERA'],
     adaptiveIcon: {
       foregroundImage: './assets/icon.png',
