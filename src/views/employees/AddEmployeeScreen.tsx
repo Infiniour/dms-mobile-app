@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { FloatingField } from '@/components/ui';
+import { Button, FloatingField } from '@/components/ui';
 import { Typography, Grid } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 import { addMember } from '@/services';
@@ -22,7 +22,8 @@ export function AddEmployeeScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const { width: screenWidth } = useWindowDimensions();
-  const [name, setName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [countryCode, setCountryCode] = useState('91');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [selectedRole, setSelectedRole] = useState<Role>('employee');
@@ -30,9 +31,14 @@ export function AddEmployeeScreen() {
   const [error, setError] = useState('');
   const horizontalPadding = screenWidth < 360 ? 16 : Grid.columns.margin;
 
+  const canSubmit =
+    firstName.trim().length > 0 &&
+    lastName.trim().length > 0 &&
+    phoneNumber.replace(/\D/g, '').length === 10;
+
   const handleAddEmployee = async () => {
-    if (!name.trim() || !phoneNumber.trim()) {
-      setError('Please fill in all required fields');
+    if (!canSubmit) {
+      setError('Please fill in first name, last name, and a 10-digit phone number');
       return;
     }
 
@@ -48,7 +54,7 @@ export function AddEmployeeScreen() {
 
       await addMember({
         showroomId,
-        name: name.trim(),
+        name: [firstName.trim(), lastName.trim()].join(' '),
         country_code: countryCode,
         phone_number: phoneNumber.trim(),
         role: selectedRole,
@@ -88,17 +94,25 @@ export function AddEmployeeScreen() {
         style={styles.scroll}
         contentContainerStyle={[styles.content, { paddingHorizontal: horizontalPadding }]}
         showsVerticalScrollIndicator={false}>
-        <View style={styles.section}>
-          <FloatingField
-            label="Full name"
-            value={name}
-            onChangeText={setName}
-            editable={!isLoading}
-            autoCapitalize="words"
-          />
-          <Text style={[styles.hint, { color: colors['on-surface-variant'] }]}>
-            Employee's full name
-          </Text>
+        <View style={styles.nameRow}>
+          <View style={[styles.section, styles.nameColumn]}>
+            <FloatingField
+              label="First name"
+              value={firstName}
+              onChangeText={setFirstName}
+              editable={!isLoading}
+              autoCapitalize="words"
+            />
+          </View>
+          <View style={[styles.section, styles.nameColumn]}>
+            <FloatingField
+              label="Last name"
+              value={lastName}
+              onChangeText={setLastName}
+              editable={!isLoading}
+              autoCapitalize="words"
+            />
+          </View>
         </View>
 
         <View style={styles.phoneRow}>
@@ -116,7 +130,7 @@ export function AddEmployeeScreen() {
             <FloatingField
               label="Phone number"
               value={phoneNumber}
-              onChangeText={setPhoneNumber}
+              onChangeText={(value) => setPhoneNumber(value.replace(/\D/g, '').slice(0, 10))}
               keyboardType="phone-pad"
               editable={!isLoading}
             />
@@ -156,31 +170,13 @@ export function AddEmployeeScreen() {
           </View>
         ) : null}
 
-        {/* Add Button */}
-        <Pressable
+        <Button
+          label="Add Employee"
           onPress={handleAddEmployee}
-          disabled={isLoading || !name.trim() || !phoneNumber.trim()}
-          style={({ pressed }) => [
-            styles.addButton,
-            {
-              backgroundColor:
-                isLoading || !name.trim() || !phoneNumber.trim() ? colors['surface-container-high'] : colors.primary,
-              opacity: pressed ? 0.85 : 1,
-            },
-          ]}>
-          <Text
-            style={[
-              styles.addButtonText,
-              {
-                color:
-                  isLoading || !name.trim() || !phoneNumber.trim()
-                    ? colors['on-surface-variant']
-                    : colors['on-primary'],
-              },
-            ]}>
-            {isLoading ? 'Adding...' : 'Add Employee'}
-          </Text>
-        </Pressable>
+          loading={isLoading}
+          disabled={isLoading || !canSubmit}
+          style={styles.addButton}
+        />
       </ScrollView>
     </SafeAreaView>
   );
@@ -271,21 +267,17 @@ const styles = StyleSheet.create({
   section: {
     gap: 8,
   },
+  nameRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  nameColumn: {
+    flex: 1,
+    minWidth: 0,
+  },
   label: {
     ...Typography.screenTitle,
     fontSize: 14,
-  },
-  input: {
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    ...Typography.body,
-    fontSize: 14,
-  },
-  hint: {
-    ...Typography.caption,
-    fontSize: 12,
   },
   phoneRow: {
     flexDirection: 'row',
@@ -331,13 +323,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   addButton: {
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
     marginTop: 8,
-  },
-  addButtonText: {
-    ...Typography.screenTitle,
-    fontSize: 16,
   },
 });

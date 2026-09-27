@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import {
   ActivityIndicator,
@@ -22,13 +21,13 @@ import { PERMISSIONS, usePermissions } from '@/permissions';
 import { ApiError, getVehicle } from '@/services';
 import { mapApiVehicleDetailToItem, toApiStatus, type ApiVehicleDetail } from './apiMapper';
 import { ChangeStatusSheet } from './components/ChangeStatusSheet';
+import { EditPricingSheet } from './components/EditPricingSheet';
+import { VehiclePhotoGallery } from './components/VehiclePhotoGallery';
 import type { VehicleDocument, VehicleExpense, VehicleItem, VehicleStatus } from './types';
 
 type VehicleDetailsScreenProps = {
   vehicleId: string;
 };
-
-const PHOTO_CHIP_COUNT = 4;
 
 export function VehicleDetailsScreen({ vehicleId }: VehicleDetailsScreenProps) {
   const router = useRouter();
@@ -39,8 +38,8 @@ export function VehicleDetailsScreen({ vehicleId }: VehicleDetailsScreenProps) {
   const [vehicle, setVehicle] = useState<VehicleItem | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
-  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [isStatusSheetOpen, setIsStatusSheetOpen] = useState(false);
+  const [isPricingSheetOpen, setIsPricingSheetOpen] = useState(false);
 
   /**
    * `silent` refetches in place after a write — a status change should update
@@ -56,7 +55,6 @@ export function VehicleDetailsScreen({ vehicleId }: VehicleDetailsScreenProps) {
       if (!silent) {
         setIsLoading(true);
         setErrorMessage('');
-        setSelectedImageIndex(0);
       }
 
       try {
@@ -135,8 +133,6 @@ export function VehicleDetailsScreen({ vehicleId }: VehicleDetailsScreenProps) {
   }
 
   const statusColors = getStatusColors(vehicle.status, colors, isDark);
-  const heroBackground = colors['surface-container-high'];
-  const chipBackground = colors['surface-container-high'];
   const outlineCardBackground = colors['surface-container-lowest'];
   const borderColor = colors.primary;
   const dividerColor = colors.primary;
@@ -173,13 +169,14 @@ export function VehicleDetailsScreen({ vehicleId }: VehicleDetailsScreenProps) {
     : [];
 
   // Against the real sale once there is one, so a sold vehicle stops reporting
-  // the margin it might have made.
-  const profit = vehicle.sale
-    ? getProfitNote(vehicle.buyingPrice, vehicle.sale.soldPrice)
-    : getProfitNote(vehicle.buyingPrice, vehicle.askingPrice);
-  const totalPhotos = vehicle.photoCount ?? PHOTO_CHIP_COUNT;
-  const visibleChipCount = Math.min(totalPhotos, PHOTO_CHIP_COUNT);
-  const extraPhotos = Math.max(totalPhotos - PHOTO_CHIP_COUNT, 0);
+  // the margin it might have made. Cost-blind roles (employees) never see this.
+  const canSeeCost = can(PERMISSIONS.VEHICLE_COST_READ);
+  const profit = canSeeCost
+    ? vehicle.sale
+      ? getProfitNote(vehicle.buyingPrice, vehicle.sale.soldPrice)
+      : getProfitNote(vehicle.buyingPrice, vehicle.askingPrice)
+    : null;
+
   // Shared by the action tile and the Add button on the expenses card so the two
   // entry points cannot drift. Undefined when the user may not add expenses,
   // which is what hides both.
@@ -196,7 +193,7 @@ export function VehicleDetailsScreen({ vehicleId }: VehicleDetailsScreenProps) {
           },
         })
     : undefined;
-  const openDocuments = can(PERMISSIONS.VEHICLE_UPDATE)
+  const openDocuments = can(PERMISSIONS.VEHICLE_DOCUMENT_UPDATE)
     ? () =>
         router.push({
           pathname: '/vehicle/documents/[id]',
@@ -208,56 +205,73 @@ export function VehicleDetailsScreen({ vehicleId }: VehicleDetailsScreenProps) {
         })
     : undefined;
 
-  // Every action here writes, so a read-only viewer gets the detail page with no
-  // action row at all rather than a row of dead buttons.
-  const actionItems = can(PERMISSIONS.VEHICLE_UPDATE)
-    ? [
-        {
-          label: 'Edit',
-          icon: 'square-edit-outline' as const,
-          onPress: () =>
-            router.push({ pathname: '/vehicle/edit/[id]', params: { id: vehicle.id } }),
-        },
-        {
-          label: 'Change State',
-          icon: 'swap-horizontal' as const,
-          // A sold vehicle's state is settled by its sale record, so the tile
-          // goes inert rather than offering to move it back into the garage.
-          onPress:
-            vehicle.status === 'Sold' ? undefined : () => setIsStatusSheetOpen(true),
-        },
-        // A vehicle can only be sold once it's actually "available" — still
-        // being prepped ("In Garage") or checked over ("Inspection") isn't
-        // ready yet. That case gets a tap-to-explain tile (muted, but still
-        // responds) rather than going silently dead like the sold/no-permission
-        // case, since the fix there is one tap away on Change State.
-        {
-          label: 'Sell',
-          icon: 'tag-outline' as const,
-          onPress: !can(PERMISSIONS.SALE_CREATE)
-            ? undefined
-            : vehicle.status === 'Sold'
-              ? undefined
-              : vehicle.status !== 'Available'
-                ? () =>
-                    Alert.alert(
-                      'Not ready to sell',
-                      'Mark this vehicle "Available" from Change State before selling it.'
-                    )
-                : () =>
-                    router.push({
-                      pathname: '/vehicle/sell/[id]',
-                      params: {
-                        id: vehicle.id,
-                        name: vehicle.name,
-                        registration: vehicle.registration,
-                      },
-                    }),
-          muted: can(PERMISSIONS.SALE_CREATE) && vehicle.status !== 'Sold' && vehicle.status !== 'Available',
-        },
-        ...(openAddExpense ? [{ label: 'Add Expense', icon: 'plus' as const, onPress: openAddExpense }] : []),
-      ]
-    : [];
+  const openSell =
+    !can(PERMISSIONS.SALE_CREATE) || vehicle.status === 'Sold'
+      ? undefined
+      : vehicle.status !== 'Available'
+        ? () =>
+            Alert.alert(
+              'Not ready to sell',
+              can(PERMISSIONS.VEHICLE_STATUS_UPDATE) || can(PERMISSIONS.VEHICLE_UPDATE)
+                ? 'Mark this vehicle "Available" from Change State before selling it.'
+                : 'This vehicle isn’t marked available yet. Ask a manager to update its state.'
+            )
+        : () =>
+            router.push({
+              pathname: '/vehicle/sell/[id]',
+              params: {
+                id: vehicle.id,
+                name: vehicle.name,
+                registration: vehicle.registration,
+              },
+            });
+
+  const canChangeStatus = can(PERMISSIONS.VEHICLE_STATUS_UPDATE) || can(PERMISSIONS.VEHICLE_UPDATE);
+
+  // Build from capabilities so employees get Status / Docs / Sell without core Edit.
+  const actionItems = [
+    ...(can(PERMISSIONS.VEHICLE_UPDATE)
+      ? [
+          {
+            label: 'Edit',
+            icon: 'square-edit-outline' as const,
+            onPress: () =>
+              router.push({ pathname: '/vehicle/edit/[id]', params: { id: vehicle.id } }),
+          },
+        ]
+      : []),
+    ...(canChangeStatus
+      ? [
+          {
+            label: 'Change State',
+            icon: 'swap-horizontal' as const,
+            onPress:
+              vehicle.status === 'Sold' ? undefined : () => setIsStatusSheetOpen(true),
+          },
+        ]
+      : []),
+    ...(can(PERMISSIONS.SALE_CREATE)
+      ? [
+          {
+            label: 'Sell',
+            icon: 'tag-outline' as const,
+            onPress: openSell,
+            muted: vehicle.status !== 'Sold' && vehicle.status !== 'Available',
+          },
+        ]
+      : []),
+    ...(openAddExpense ? [{ label: 'Add Expense', icon: 'plus' as const, onPress: openAddExpense }] : []),
+  ];
+
+  // Engine/chassis/insurance_valid_till are not returned by the vehicle APIs
+  // yet — only show rows that actually have a value so the card isn't empty.
+  const moreInfoRows = [
+    { label: 'Engine number', value: vehicle.engineNumber },
+    { label: 'Chassis number', value: vehicle.chassisNumber },
+    { label: 'Transmission', value: vehicle.transmission },
+    { label: 'Color', value: vehicle.color },
+    { label: 'Insurance valid till', value: vehicle.insuranceValidTill },
+  ].filter((row) => row.value.trim().length > 0);
 
   return (
     <SafeAreaView
@@ -271,58 +285,14 @@ export function VehicleDetailsScreen({ vehicleId }: VehicleDetailsScreenProps) {
         style={styles.scroll}
         contentContainerStyle={[styles.content, { paddingHorizontal: horizontalPadding }]}
         showsVerticalScrollIndicator={false}>
-        <View style={[styles.heroCard, { backgroundColor: heroBackground }]}>
-          {vehicle.imageUrls && vehicle.imageUrls.length > 0 ? (
-            <Image
-              source={{ uri: vehicle.imageUrls[selectedImageIndex] || vehicle.imageUrl }}
-              style={styles.heroImage}
-              contentFit="cover"
-              transition={150}
-              cachePolicy="memory-disk"
-              recyclingKey={`${vehicle.id}-${selectedImageIndex}`}
-            />
-          ) : vehicle.imageUrl ? (
-            <Image
-              source={{ uri: vehicle.imageUrl }}
-              style={styles.heroImage}
-              contentFit="cover"
-              transition={150}
-              cachePolicy="memory-disk"
-              recyclingKey={vehicle.id}
-            />
-          ) : (
-            <MaterialCommunityIcons name={vehicle.icon} size={96} color={colors['on-surface-variant']} />
-          )}
-        </View>
-
-        <View style={styles.photoChips}>
-          {(vehicle.imageUrls || []).slice(0, PHOTO_CHIP_COUNT).map((imageUrl, index) => (
-            <Pressable
-              key={index}
-              onPress={() => setSelectedImageIndex(index)}
-              style={[
-                styles.photoChip,
-                {
-                  backgroundColor: chipBackground,
-                  borderColor: selectedImageIndex === index ? borderColor : 'transparent',
-                  borderWidth: selectedImageIndex === index ? 2 : 0,
-                  opacity: selectedImageIndex === index ? 1 : 0.6,
-                },
-              ]}>
-              <Image
-                source={{ uri: imageUrl }}
-                style={styles.photoChipImage}
-                contentFit="cover"
-                cachePolicy="memory-disk"
-              />
-            </Pressable>
-          ))}
-          {extraPhotos > 0 ? (
-            <View style={[styles.photoChip, styles.photoChipCount, { backgroundColor: chipBackground }]}>
-              <Text style={[styles.photoChipCountText, { color: colors.primary }]}>+{extraPhotos}</Text>
-            </View>
-          ) : null}
-        </View>
+        <VehiclePhotoGallery
+          photos={
+            vehicle.photos?.length
+              ? vehicle.photos
+              : (vehicle.imageUrls ?? []).map((url) => ({ url, label: 'photo' }))
+          }
+          fallbackIcon={vehicle.icon}
+        />
 
         <View style={styles.titleRow}>
           <View style={styles.titleBlock}>
@@ -339,11 +309,30 @@ export function VehicleDetailsScreen({ vehicleId }: VehicleDetailsScreenProps) {
         </View>
 
         <View style={styles.priceGrid}>
-          <PriceCard label="Buying price" value={vehicle.buyingPrice} />
+          {canSeeCost ? (
+            <PriceCard
+              label="Buying price"
+              value={vehicle.buyingPrice}
+              onEdit={
+                can(PERMISSIONS.VEHICLE_UPDATE) && !vehicle.sale
+                  ? () => setIsPricingSheetOpen(true)
+                  : undefined
+              }
+            />
+          ) : null}
           {vehicle.sale ? (
             <PriceCard label="Sold for" value={vehicle.sale.soldPrice} note={profit} />
           ) : (
-            <PriceCard label="Asking price" value={vehicle.askingPrice} note={profit} />
+            <PriceCard
+              label="Asking price"
+              value={vehicle.askingPrice}
+              note={profit}
+              onEdit={
+                can(PERMISSIONS.VEHICLE_UPDATE)
+                  ? () => setIsPricingSheetOpen(true)
+                  : undefined
+              }
+            />
           )}
         </View>
 
@@ -426,16 +415,28 @@ export function VehicleDetailsScreen({ vehicleId }: VehicleDetailsScreenProps) {
           ))}
         </View>
 
-        <Text style={[styles.sectionKicker, { color: colors['on-surface-variant'] }]}>MORE INFO</Text>
-        <View style={[styles.infoCard, { backgroundColor: outlineCardBackground, borderColor }]}>
-          <DetailRow label="Engine number" value={vehicle.engineNumber} showDivider dividerColor={dividerColor} />
-          <DetailRow label="Chassis number" value={vehicle.chassisNumber} showDivider dividerColor={dividerColor} />
-          <DetailRow label="Transmission" value={vehicle.transmission} showDivider dividerColor={dividerColor} />
-          <DetailRow label="Color" value={vehicle.color} showDivider dividerColor={dividerColor} />
-          <DetailRow label="Insurance valid till" value={vehicle.insuranceValidTill} />
-        </View>
+        {moreInfoRows.length > 0 ? (
+          <>
+            <Text style={[styles.sectionKicker, { color: colors['on-surface-variant'] }]}>
+              MORE INFO
+            </Text>
+            <View style={[styles.infoCard, { backgroundColor: outlineCardBackground, borderColor }]}>
+              {moreInfoRows.map((row, index) => (
+                <DetailRow
+                  key={row.label}
+                  label={row.label}
+                  value={row.value}
+                  showDivider={index < moreInfoRows.length - 1}
+                  dividerColor={dividerColor}
+                />
+              ))}
+            </View>
+          </>
+        ) : null}
 
-        <ExpenseSection expenses={vehicle.expenses} onAdd={openAddExpense} />
+        {canSeeCost ? (
+          <ExpenseSection expenses={vehicle.expenses} onAdd={openAddExpense} />
+        ) : null}
 
         <View style={styles.documentsHeader}>
           <Text style={[styles.sectionKicker, styles.documentsKicker, { color: colors['on-surface-variant'] }]}>
@@ -467,11 +468,32 @@ export function VehicleDetailsScreen({ vehicleId }: VehicleDetailsScreenProps) {
         currentStatus={toApiStatus(vehicle.status)}
         onUpdated={() => loadVehicle({ silent: true })}
       />
+
+      <EditPricingSheet
+        visible={isPricingSheetOpen}
+        onClose={() => setIsPricingSheetOpen(false)}
+        vehicleId={vehicle.id}
+        buyingPriceAmount={vehicle.buyingPriceAmount}
+        askingPriceAmount={vehicle.askingPriceAmount}
+        buyingDate={vehicle.buyingDate}
+        onUpdated={() => loadVehicle({ silent: true })}
+      />
     </SafeAreaView>
   );
 }
 
-function PriceCard({ label, value, note }: { label: string; value: string; note?: string | null }) {
+function PriceCard({
+  label,
+  value,
+  note,
+  onEdit,
+}: {
+  label: string;
+  value: string;
+  note?: string | null;
+  /** Pencil opens inline pricing edit — omitted when the user cannot update. */
+  onEdit?: () => void;
+}) {
   const { colors } = useTheme();
 
   return (
@@ -480,7 +502,14 @@ function PriceCard({ label, value, note }: { label: string; value: string; note?
         styles.priceCard,
         { backgroundColor: colors['surface-container'], borderColor: colors.primary },
       ]}>
-      <Text style={[styles.priceLabel, { color: colors['on-surface'] }]}>{label}</Text>
+      <View style={styles.priceCardHeader}>
+        <Text style={[styles.priceLabel, { color: colors['on-surface'] }]}>{label}</Text>
+        {onEdit ? (
+          <Pressable onPress={onEdit} hitSlop={10} accessibilityLabel={`Edit ${label}`}>
+            <Ionicons name="pencil" size={16} color={colors.primary} />
+          </Pressable>
+        ) : null}
+      </View>
       <Text style={[styles.priceValue, { color: colors['on-surface'] }]}>{value}</Text>
       {note ? <Text style={[styles.priceNote, { color: colors.tertiary }]}>{note}</Text> : null}
     </View>
@@ -788,42 +817,6 @@ const styles = StyleSheet.create({
     paddingBottom: 31,
     paddingTop: 17,
   },
-  heroCard: {
-    height: 179,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  heroImage: {
-    width: '100%',
-    height: '100%',
-  },
-  photoChips: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 12,
-  },
-  photoChip: {
-    flex: 1,
-    height: 48,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  photoChipImage: {
-    width: '100%',
-    height: '100%',
-  },
-  photoChipCount: {
-    flexBasis: 0,
-  },
-  photoChipCountText: {
-    fontFamily: Typography.screenTitle.fontFamily,
-    fontSize: 16,
-  },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -875,10 +868,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     paddingVertical: 12,
   },
+  priceCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
   priceLabel: {
     fontFamily: FontFamily.regular,
     fontSize: 13,
     lineHeight: 16,
+    flexShrink: 1,
   },
   priceValue: {
     fontFamily: FontFamily.medium,

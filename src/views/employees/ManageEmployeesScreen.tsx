@@ -14,7 +14,7 @@ import { Typography, Grid } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 import { listMembers, addMember, removeMember, updateMemberRole } from '@/services';
 import { resolvePrimaryShowroomId } from '@/utils/showroom';
-import { SkeletonBox, BackButton, BottomSheet, FloatingField } from '@/components/ui';
+import { SkeletonBox, BackButton, BottomSheet, Button, FloatingField } from '@/components/ui';
 import { useTabDataFetch } from '@/hooks/useTabDataFetch';
 import { PERMISSIONS, usePermissions, type PermissionCheck } from '@/permissions';
 
@@ -40,7 +40,8 @@ export function ManageEmployeesScreen() {
   const { can } = usePermissions();
   const [employees, setEmployees] = useState<Member[]>([]);
   const [showAddSheet, setShowAddSheet] = useState(false);
-  const [name, setName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [countryCode, setCountryCode] = useState('91');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [selectedRole, setSelectedRole] = useState<Role>('employee');
@@ -68,8 +69,8 @@ export function ManageEmployeesScreen() {
   });
 
   const handleAddEmployee = async () => {
-    if (!name.trim() || !phoneNumber.trim()) {
-      setAddError('Please fill in all required fields');
+    if (!firstName.trim() || !lastName.trim() || phoneNumber.replace(/\D/g, '').length !== 10) {
+      setAddError('Please fill in first name, last name, and a 10-digit phone number');
       return;
     }
 
@@ -85,7 +86,7 @@ export function ManageEmployeesScreen() {
 
       await addMember({
         showroomId,
-        name: name.trim(),
+        name: [firstName.trim(), lastName.trim()].join(' '),
         country_code: countryCode,
         phone_number: phoneNumber.trim(),
         role: selectedRole,
@@ -99,7 +100,8 @@ export function ManageEmployeesScreen() {
       setIsLoading(false);
 
       // Reset and close
-      setName('');
+      setFirstName('');
+      setLastName('');
       setCountryCode('91');
       setPhoneNumber('');
       setSelectedRole('employee');
@@ -195,21 +197,6 @@ export function ManageEmployeesScreen() {
           Add & manage your sales staff
         </Text>
 
-        {/* Add Button */}
-        {can(PERMISSIONS.EMPLOYEE_CREATE) ? (
-          <Pressable
-            onPress={() => setShowAddSheet(true)}
-            style={({ pressed }) => [
-              styles.addButton,
-              { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 },
-            ]}>
-            <Ionicons name="add" size={24} color={colors['on-primary']} />
-            <Text style={[styles.addButtonText, { color: colors['on-primary'] }]}>
-              Add Employee
-            </Text>
-          </Pressable>
-        ) : null}
-
         {isLoading ? (
           <>
             {Array(5)
@@ -252,6 +239,12 @@ export function ManageEmployeesScreen() {
         )}
       </ScrollView>
 
+      {can(PERMISSIONS.EMPLOYEE_CREATE) ? (
+        <View style={[styles.footer, { paddingHorizontal: horizontalPadding }]}>
+          <Button label="Add Employee" onPress={() => setShowAddSheet(true)} />
+        </View>
+      ) : null}
+
       {/* Add Employee Bottom Sheet */}
       <BottomSheet
         visible={showAddSheet}
@@ -260,8 +253,10 @@ export function ManageEmployeesScreen() {
         <AddEmployeeBottomSheet
           onClose={() => setShowAddSheet(false)}
           onAdd={handleAddEmployee}
-          name={name}
-          setName={setName}
+          firstName={firstName}
+          setFirstName={setFirstName}
+          lastName={lastName}
+          setLastName={setLastName}
           countryCode={countryCode}
           setCountryCode={setCountryCode}
           phoneNumber={phoneNumber}
@@ -280,8 +275,10 @@ export function ManageEmployeesScreen() {
 function AddEmployeeBottomSheet({
   onClose,
   onAdd,
-  name,
-  setName,
+  firstName,
+  setFirstName,
+  lastName,
+  setLastName,
   countryCode,
   setCountryCode,
   phoneNumber,
@@ -294,8 +291,10 @@ function AddEmployeeBottomSheet({
 }: {
   onClose: () => void;
   onAdd: () => void;
-  name: string;
-  setName: (val: string) => void;
+  firstName: string;
+  setFirstName: (val: string) => void;
+  lastName: string;
+  setLastName: (val: string) => void;
   countryCode: string;
   setCountryCode: (val: string) => void;
   phoneNumber: string;
@@ -325,18 +324,27 @@ function AddEmployeeBottomSheet({
 
       {/* Form Section */}
       <View style={styles.formSection}>
-        <View style={styles.inputGroup}>
-          <FloatingField
-            label="Full name"
-            value={name}
-            onChangeText={setName}
-            editable={!isLoading}
-            autoCapitalize="words"
-            error={Boolean(error)}
-          />
-          <Text style={[styles.helperText, { color: colors['on-surface-variant'] }]}>
-            Employee's full name
-          </Text>
+        <View style={styles.nameRow}>
+          <View style={[styles.inputGroup, styles.nameColumn]}>
+            <FloatingField
+              label="First name"
+              value={firstName}
+              onChangeText={setFirstName}
+              editable={!isLoading}
+              autoCapitalize="words"
+              error={Boolean(error)}
+            />
+          </View>
+          <View style={[styles.inputGroup, styles.nameColumn]}>
+            <FloatingField
+              label="Last name"
+              value={lastName}
+              onChangeText={setLastName}
+              editable={!isLoading}
+              autoCapitalize="words"
+              error={Boolean(error)}
+            />
+          </View>
         </View>
 
         <View style={styles.phoneRow}>
@@ -355,7 +363,7 @@ function AddEmployeeBottomSheet({
             <FloatingField
               label="Phone number"
               value={phoneNumber}
-              onChangeText={setPhoneNumber}
+              onChangeText={(value) => setPhoneNumber(value.replace(/\D/g, '').slice(0, 10))}
               keyboardType="phone-pad"
               editable={!isLoading}
               error={Boolean(error)}
@@ -414,52 +422,15 @@ function AddEmployeeBottomSheet({
         ) : null}
       </View>
 
-      {/* Action Buttons */}
       <View style={styles.sheetActions}>
-        <Pressable
-          onPress={onClose}
-          style={({ pressed }) => [
-            styles.cancelButton,
-            {
-              backgroundColor: colors['surface-container-high'],
-              opacity: pressed ? 0.7 : 1,
-            },
-          ]}>
-          <Text style={[styles.cancelButtonText, { color: colors['on-surface'] }]}>Cancel</Text>
-        </Pressable>
-        <Pressable
+        <Button
+          label="Add Employee"
           onPress={onAdd}
-          disabled={isLoading || !name.trim() || !phoneNumber.trim()}
-          style={({ pressed }) => [
-            styles.addButton,
-            {
-              backgroundColor:
-                isLoading || !name.trim() || !phoneNumber.trim() ? colors['surface-container-high'] : colors.primary,
-              opacity: pressed ? 0.85 : 1,
-            },
-          ]}>
-          <Ionicons
-            name="add"
-            size={22}
-            color={
-              isLoading || !name.trim() || !phoneNumber.trim()
-                ? colors['on-surface-variant']
-                : colors['on-primary']
-            }
-          />
-          <Text
-            style={[
-              styles.addButtonText,
-              {
-                color:
-                  isLoading || !name.trim() || !phoneNumber.trim()
-                    ? colors['on-surface-variant']
-                    : colors['on-primary'],
-              },
-            ]}>
-            {isLoading ? 'Adding...' : 'Add Employee'}
-          </Text>
-        </Pressable>
+          loading={isLoading}
+          disabled={
+            isLoading || !firstName.trim() || !lastName.trim() || phoneNumber.trim().length !== 10
+          }
+        />
       </View>
     </ScrollView>
   );
@@ -695,22 +666,11 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 14,
     lineHeight: 20,
-    marginBottom: 16,
+    marginBottom: 8,
   },
-  addButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderRadius: 12,
-    gap: 8,
-  },
-  addButtonText: {
-    ...Typography.screenTitle,
-    fontSize: 16,
-    fontWeight: '600',
+  footer: {
+    paddingTop: 8,
+    paddingBottom: 12,
   },
   scroll: {
     flex: 1,
@@ -844,12 +804,17 @@ const styles = StyleSheet.create({
     gap: 20,
   },
   sheetActions: {
-    flexDirection: 'row',
-    gap: 12,
+    gap: 4,
     marginTop: 28,
     paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+  },
+  nameRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  nameColumn: {
+    flex: 1,
+    minWidth: 0,
   },
   inputGroup: {
     gap: 8,
@@ -935,18 +900,5 @@ const styles = StyleSheet.create({
     ...Typography.body,
     fontSize: 13,
     flex: 1,
-  },
-  cancelButton: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: '#D0D0D0',
-  },
-  cancelButtonText: {
-    ...Typography.screenTitle,
-    fontSize: 16,
-    fontWeight: '600',
   },
 });

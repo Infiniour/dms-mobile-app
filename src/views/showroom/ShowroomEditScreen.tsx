@@ -281,6 +281,8 @@ export function ShowroomEditScreen() {
               value={address}
               onChangeText={setAddress}
               editable={!isSaving}
+              multiline
+              numberOfLines={3}
             />
 
             <View style={styles.rowFields}>

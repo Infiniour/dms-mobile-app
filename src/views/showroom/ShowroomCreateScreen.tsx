@@ -183,6 +183,7 @@ export function ShowroomCreateScreen() {
             inputColor={colors['on-surface']}
             placeholderColor={colors['on-surface-variant']}
             editable={!isSaving}
+            multiline
           />
           <FormInput
             label="City"

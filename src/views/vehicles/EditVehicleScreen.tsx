@@ -7,6 +7,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -32,7 +33,6 @@ import {
 import {
   FieldLabel,
   FormTextInput,
-  IconTextInput,
   SelectField,
   formFieldStyles,
 } from './components/VehicleFormFields';
@@ -121,6 +121,7 @@ export function EditVehicleScreen({ vehicleId }: EditVehicleScreenProps) {
   const [removingPhotoId, setRemovingPhotoId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSold, setIsSold] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -140,6 +141,7 @@ export function EditVehicleScreen({ vehicleId }: EditVehicleScreenProps) {
         const detail = responseData?.data ?? (responseData as unknown as ApiVehicleDetail);
 
         setForm(formFromDetail(detail));
+        setIsSold(detail.basic?.current_status?.status === 'sold');
         setBuyingDate(detail.buying_details?.buying_date ?? undefined);
         setTaggedAt(detail.pricing?.tagged_at ?? undefined);
         setCurrency(detail.pricing?.currency ?? 'inr');
@@ -189,7 +191,8 @@ export function EditVehicleScreen({ vehicleId }: EditVehicleScreenProps) {
   };
 
   const handleSubmit = async () => {
-    if (!form || !isFormComplete(form) || isSubmitting) {
+    // Core update + pricing + photo APIs all return 422 once sold.
+    if (!form || isSold || !isFormComplete(form) || isSubmitting) {
       return;
     }
 
@@ -316,8 +319,19 @@ export function EditVehicleScreen({ vehicleId }: EditVehicleScreenProps) {
             Edit{'\n'}vehicle
           </Text>
           <Text style={[Typography.body, styles.subtitle, { color: colors['on-surface'] }]}>
-            Update inventory details, pricing, and photos.
+            {isSold
+              ? 'This vehicle is sold. Details can be viewed but no longer changed.'
+              : 'Update inventory details, pricing, and photos.'}
           </Text>
+
+          {isSold ? (
+            <View style={[styles.soldNotice, { backgroundColor: colors['error-container'] }]}>
+              <Ionicons name="lock-closed-outline" size={16} color={colors['on-error-container']} />
+              <Text style={[styles.soldText, { color: colors['on-error-container'] }]}>
+                Sold vehicles are locked. Core fields, pricing, and photos can’t be edited.
+              </Text>
+            </View>
+          ) : null}
 
           <View style={styles.fieldGroup}>
             <FieldLabel label="Photos" />
@@ -325,8 +339,9 @@ export function EditVehicleScreen({ vehicleId }: EditVehicleScreenProps) {
               photos={newPhotos}
               onChange={setNewPhotos}
               existingPhotos={existingPhotos}
-              onRemoveExisting={removeExistingPhoto}
+              onRemoveExisting={isSold ? undefined : removeExistingPhoto}
               removingExistingId={removingPhotoId}
+              locked={isSold}
             />
           </View>
 
@@ -340,6 +355,7 @@ export function EditVehicleScreen({ vehicleId }: EditVehicleScreenProps) {
                     updateField('buyingPrice', value.replace(/\D/g, ''))
                   }
                   keyboardType="number-pad"
+                  editable={!isSold}
                 />
               </View>
               <View style={formFieldStyles.fieldColumn}>
@@ -350,6 +366,7 @@ export function EditVehicleScreen({ vehicleId }: EditVehicleScreenProps) {
                     updateField('askingPrice', value.replace(/\D/g, ''))
                   }
                   keyboardType="number-pad"
+                  editable={!isSold}
                 />
               </View>
             </View>
@@ -361,6 +378,7 @@ export function EditVehicleScreen({ vehicleId }: EditVehicleScreenProps) {
                   value={form.vehicleType}
                   options={vehicleTypeOptions}
                   onChange={(value) => updateField('vehicleType', value)}
+                  disabled={isSold}
                 />
               </View>
               <View style={formFieldStyles.fieldColumn}>
@@ -369,6 +387,7 @@ export function EditVehicleScreen({ vehicleId }: EditVehicleScreenProps) {
                   value={form.fuelType}
                   options={fuelTypeOptions}
                   onChange={(value) => updateField('fuelType', value)}
+                  disabled={isSold}
                 />
               </View>
             </View>
@@ -380,6 +399,7 @@ export function EditVehicleScreen({ vehicleId }: EditVehicleScreenProps) {
                   value={form.manufacturer}
                   onChangeText={(value) => updateField('manufacturer', value)}
                   placeholder="Suzuki"
+                  editable={!isSold}
                 />
               </View>
               <View style={formFieldStyles.fieldColumn}>
@@ -388,6 +408,7 @@ export function EditVehicleScreen({ vehicleId }: EditVehicleScreenProps) {
                   value={form.model}
                   onChangeText={(value) => updateField('model', value)}
                   placeholder="Swift Dzire VXI"
+                  editable={!isSold}
                 />
               </View>
             </View>
@@ -399,6 +420,7 @@ export function EditVehicleScreen({ vehicleId }: EditVehicleScreenProps) {
                   value={form.variant}
                   onChangeText={(value) => updateField('variant', value)}
                   placeholder="LE"
+                  editable={!isSold}
                 />
               </View>
               <View style={formFieldStyles.fieldColumn}>
@@ -407,6 +429,7 @@ export function EditVehicleScreen({ vehicleId }: EditVehicleScreenProps) {
                   value={form.color}
                   onChangeText={(value) => updateField('color', value)}
                   placeholder="White"
+                  editable={!isSold}
                 />
               </View>
             </View>
@@ -418,6 +441,7 @@ export function EditVehicleScreen({ vehicleId }: EditVehicleScreenProps) {
                   value={form.yearOfManufacture}
                   options={yearOfManufactureOptions}
                   onChange={(value) => updateField('yearOfManufacture', value)}
+                  disabled={isSold}
                 />
               </View>
               <View style={formFieldStyles.fieldColumn}>
@@ -429,6 +453,7 @@ export function EditVehicleScreen({ vehicleId }: EditVehicleScreenProps) {
                   }
                   placeholder="50000"
                   keyboardType="number-pad"
+                  editable={!isSold}
                 />
               </View>
             </View>
@@ -441,6 +466,7 @@ export function EditVehicleScreen({ vehicleId }: EditVehicleScreenProps) {
                   onChangeText={(value) => updateField('rtoCode', value.toUpperCase())}
                   placeholder="AS-01"
                   autoCapitalize="characters"
+                  editable={!isSold}
                 />
               </View>
               <View style={formFieldStyles.fieldColumn}>
@@ -450,18 +476,9 @@ export function EditVehicleScreen({ vehicleId }: EditVehicleScreenProps) {
                   options={indianStateOptions}
                   onChange={(value) => updateField('registrationState', value)}
                   searchable
+                  disabled={isSold}
                 />
               </View>
-            </View>
-
-            <View style={formFieldStyles.fieldGroup}>
-              <IconTextInput
-                label="Registration number"
-                icon="car-sport-outline"
-                value={form.registrationNumber}
-                editable={false}
-                style={styles.disabledInput}
-              />
             </View>
 
             <View style={formFieldStyles.fieldGroup}>
@@ -470,6 +487,7 @@ export function EditVehicleScreen({ vehicleId }: EditVehicleScreenProps) {
                 value={form.transmissionType}
                 options={transmissionTypeOptions}
                 onChange={(value) => updateField('transmissionType', value)}
+                disabled={isSold}
               />
             </View>
 
@@ -481,13 +499,15 @@ export function EditVehicleScreen({ vehicleId }: EditVehicleScreenProps) {
             </Text>
           ) : null}
 
-          <Button
-            label="Save changes"
-            onPress={handleSubmit}
-            disabled={!isFormComplete(form) || isSubmitting}
-            loading={isSubmitting}
-            style={styles.submitButton}
-          />
+          {!isSold ? (
+            <Button
+              label="Save changes"
+              onPress={handleSubmit}
+              disabled={!isFormComplete(form) || isSubmitting}
+              loading={isSubmitting}
+              style={styles.submitButton}
+            />
+          ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -530,12 +550,23 @@ const styles = StyleSheet.create({
     lineHeight: 23,
     marginBottom: 24,
   },
+  soldNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 20,
+  },
+  soldText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+  },
   fieldGroup: {
     gap: 8,
     marginBottom: 20,
-  },
-  disabledInput: {
-    opacity: 0.5,
   },
   errorText: {
     marginTop: 8,

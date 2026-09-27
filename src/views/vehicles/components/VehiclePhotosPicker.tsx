@@ -51,6 +51,8 @@ type VehiclePhotosPickerProps = {
   onRemoveExisting?: (photo: ExistingVehiclePhoto) => void;
   /** id of an existing photo currently being deleted, so its tile can show as busy. */
   removingExistingId?: number | null;
+  /** Sold vehicles: view existing photos only — add/remove are blocked by the API. */
+  locked?: boolean;
 };
 
 const TILE_SIZE = 60;
@@ -62,6 +64,7 @@ export function VehiclePhotosPicker({
   existingPhotos = [],
   onRemoveExisting,
   removingExistingId,
+  locked = false,
 }: VehiclePhotosPickerProps) {
   const { colors } = useTheme();
   const [activeLabel, setActiveLabel] = useState<PhotoLabel | null>(null);
@@ -81,8 +84,14 @@ export function VehiclePhotosPicker({
   ];
 
   const openSlot = (label: PhotoLabel) => {
+    const entries = getSlotEntries(label);
+    // Locked (sold): only open slots that already have photos, and never the add flow.
+    if (locked && entries.length === 0) {
+      return;
+    }
+
     setActiveLabel(label);
-    setSheetMode(getSlotEntries(label).length > 0 ? 'manage' : 'source');
+    setSheetMode(locked || entries.length > 0 ? 'manage' : 'source');
   };
 
   const addPhoto = (
@@ -139,13 +148,14 @@ export function VehiclePhotosPicker({
             <View key={section.value} style={styles.slot}>
               <Pressable
                 onPress={() => openSlot(section.value)}
+                disabled={locked && !cover}
                 style={[
                   styles.tile,
                   {
                     borderColor: colors.primary,
                     borderStyle: cover ? 'solid' : 'dashed',
                     backgroundColor: colors['surface-container-low'],
-                    opacity: isCoverBusy ? 0.5 : 1,
+                    opacity: isCoverBusy || (locked && !cover) ? 0.5 : 1,
                   },
                 ]}>
                 {cover ? (
@@ -188,23 +198,34 @@ export function VehiclePhotosPicker({
                 return (
                   <View key={key} style={[styles.manageTile, isBusy && styles.tileBusy]}>
                     <Image source={{ uri: entry.uri }} style={styles.image} />
-                    <Pressable
-                      onPress={() =>
-                        entry.kind === 'existing'
-                          ? onRemoveExisting?.(entry.source)
-                          : removePhoto(entry.source)
-                      }
-                      disabled={isBusy}
-                      hitSlop={6}
-                      style={[styles.removeBadge, { backgroundColor: colors.error }]}>
-                      <Ionicons name="close" size={12} color={colors['on-error']} />
-                    </Pressable>
+                    {!locked ? (
+                      <Pressable
+                        onPress={() =>
+                          entry.kind === 'existing'
+                            ? onRemoveExisting?.(entry.source)
+                            : removePhoto(entry.source)
+                        }
+                        disabled={isBusy}
+                        hitSlop={6}
+                        style={[styles.removeBadge, { backgroundColor: colors.error }]}>
+                        <Ionicons name="close" size={12} color={colors['on-error']} />
+                      </Pressable>
+                    ) : null}
                   </View>
                 );
               })}
             </View>
 
-            {activeRemainingSlots > 0 ? (
+            {locked ? (
+              <Text
+                style={[
+                  Typography.caption,
+                  styles.limitNote,
+                  { color: colors['on-surface-variant'] },
+                ]}>
+                Photos can’t be changed after the vehicle is sold.
+              </Text>
+            ) : activeRemainingSlots > 0 ? (
               <Pressable
                 onPress={() => setSheetMode('source')}
                 style={({ pressed }) => [

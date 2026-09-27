@@ -50,13 +50,22 @@ type SelectFieldProps = {
   onChange: (value: string) => void;
   /** Adds a search box atop the sheet, for lists too long to scan by eye (e.g. states). */
   searchable?: boolean;
+  /** Blocks opening the sheet — used for sold / immutable fields. */
+  disabled?: boolean;
 };
 
 /**
  * Same Paper outlined size as FloatingField. Opens a sheet of fixed options
  * instead of the keyboard — used wherever a form needs a dropdown.
  */
-export function SelectField({ label, value, options, onChange, searchable }: SelectFieldProps) {
+export function SelectField({
+  label,
+  value,
+  options,
+  onChange,
+  searchable,
+  disabled = false,
+}: SelectFieldProps) {
   const { colors } = useTheme();
   const { height: screenHeight } = useWindowDimensions();
   const [isOpen, setIsOpen] = useState(false);
@@ -75,13 +84,24 @@ export function SelectField({ label, value, options, onChange, searchable }: Sel
 
   return (
     <>
-      <Pressable onPress={() => setIsOpen(true)} accessibilityRole="button" accessibilityLabel={label}>
+      <Pressable
+        onPress={() => {
+          if (!disabled) {
+            setIsOpen(true);
+          }
+        }}
+        disabled={disabled}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        accessibilityState={{ disabled }}>
         <View pointerEvents="none">
           <FloatingField
             label={label}
             value={selected?.label ?? ''}
-            editable={false}
-            rightIcon="chevron-down"
+            // Outer Pressable owns the tap; pointerEvents blocks the input.
+            editable={!disabled}
+            disabled={disabled}
+            rightIcon={disabled ? undefined : 'chevron-down'}
           />
         </View>
       </Pressable>

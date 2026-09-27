@@ -36,6 +36,13 @@ function ThemedPaperProvider({ children }: { children: ReactNode }) {
     return {
       ...base,
       fonts: paperFonts,
+      // Paper floats labels with Animated timing. Keep scale at 0 so a field
+      // that already has a value (or gets one from reverse-geocode) shows the
+      // floated label immediately instead of lagging behind the text.
+      animation: {
+        ...base.animation,
+        scale: 0,
+      },
       colors: {
         ...base.colors,
         primary: colors.primary,

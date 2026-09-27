@@ -10,7 +10,7 @@ export default function VehicleDocumentsRoute() {
   }>();
 
   return (
-    <RequirePermission permission={PERMISSIONS.VEHICLE_UPDATE}>
+    <RequirePermission permission={PERMISSIONS.VEHICLE_DOCUMENT_UPDATE}>
       <VehicleDocumentsScreen vehicleId={id} vehicleName={name} registration={registration} />
     </RequirePermission>
   );

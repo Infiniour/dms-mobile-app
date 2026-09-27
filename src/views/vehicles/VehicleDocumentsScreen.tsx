@@ -1,7 +1,6 @@
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
-  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,6 +18,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useFocusEffect } from 'expo-router';
 import { addVehicleDocument, getVehicle } from '@/services';
 import type { ApiVehicleDetail } from './apiMapper';
+import { DocumentPreviewModal } from './components/DocumentPreviewModal';
 import {
   DOCUMENT_RULES,
   DOCUMENT_SLOTS,
@@ -52,6 +52,11 @@ export function VehicleDocumentsScreen({
   const [errorMessage, setErrorMessage] = useState('');
   /** The server refuses document uploads once a vehicle is sold. */
   const [isSold, setIsSold] = useState(false);
+  const [preview, setPreview] = useState<{
+    uri: string;
+    name: string;
+    kind: 'image' | 'pdf' | 'other';
+  } | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -338,6 +343,13 @@ export function VehicleDocumentsScreen({
               locked={isSold}
               onAdd={() => openPickerFor(slot)}
               onRemove={(fileId) => removeFile(slot.type, fileId)}
+              onView={(file) =>
+                setPreview({
+                  uri: file.uri,
+                  name: file.name,
+                  kind: file.kind,
+                })
+              }
             />
           ))}
         </View>
@@ -430,6 +442,14 @@ export function VehicleDocumentsScreen({
           ]);
         }}
       />
+
+      <DocumentPreviewModal
+        visible={preview !== null}
+        onClose={() => setPreview(null)}
+        uri={preview?.uri ?? ''}
+        name={preview?.name ?? 'Document'}
+        kind={preview?.kind ?? 'image'}
+      />
     </SafeAreaView>
   );
 }
@@ -441,6 +461,7 @@ function DocumentCard({
   locked,
   onAdd,
   onRemove,
+  onView,
 }: {
   slot: DocumentSlot;
   files: DocumentFile[];
@@ -449,6 +470,7 @@ function DocumentCard({
   locked: boolean;
   onAdd: () => void;
   onRemove: (fileId: string) => void;
+  onView: (file: DocumentFile) => void;
 }) {
   const { colors, isDark } = useTheme();
   const pendingCount = files.filter((file) => file.remoteId === undefined).length;
@@ -491,9 +513,8 @@ function DocumentCard({
             return (
               <Pressable
                 key={file.id}
-                // Uploaded files open their signed URL; a locally picked one has
-                // nothing to open yet.
-                onPress={isUploaded ? () => Linking.openURL(file.uri) : undefined}
+                // Uploaded files open in-app; a locally picked one has nothing to open yet.
+                onPress={isUploaded ? () => onView(file) : undefined}
                 style={[styles.fileRow, { borderTopColor: colors['outline-variant'] }]}>
                 <MaterialCommunityIcons
                   name={file.kind === 'pdf' ? 'file-pdf-box' : 'image-outline'}
@@ -515,7 +536,7 @@ function DocumentCard({
                 {isUploaded ? (
                   // The API has no delete-document endpoint, so an uploaded file
                   // cannot be removed — showing a bin here would be a dead control.
-                  <Ionicons name="open-outline" size={17} color={colors['on-surface-variant']} />
+                  <Ionicons name="expand-outline" size={17} color={colors['on-surface-variant']} />
                 ) : (
                   <Pressable
                     onPress={() => onRemove(file.id)}

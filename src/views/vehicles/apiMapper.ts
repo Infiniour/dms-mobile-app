@@ -314,11 +314,20 @@ export function collectImagesWithLabels(
     return [];
   }
 
-  return Object.entries(images).flatMap(([label, sectionImages]) =>
-    (sectionImages ?? [])
+  const known = IMAGE_SECTION_PRIORITY.flatMap((section) =>
+    (images[section] ?? [])
       .filter((image) => Boolean(image?.url))
-      .map((image) => ({ ...image, label }))
+      .map((image) => ({ ...image, label: section }))
   );
+  const rest = Object.entries(images)
+    .filter(([section]) => !IMAGE_SECTION_PRIORITY.includes(section))
+    .flatMap(([label, sectionImages]) =>
+      (sectionImages ?? [])
+        .filter((image) => Boolean(image?.url))
+        .map((image) => ({ ...image, label }))
+    );
+
+  return [...known, ...rest];
 }
 
 export function mapApiVehicleToItem(vehicle: ApiVehicle): VehicleItem {
@@ -335,6 +344,7 @@ export function mapApiVehicleToItem(vehicle: ApiVehicle): VehicleItem {
     price: askingPrice,
     buyingPrice,
     askingPrice,
+    buyingPriceAmount: vehicle.pricing?.buying_price ?? undefined,
     askingPriceAmount: vehicle.pricing?.price_tag ?? undefined,
     status,
     meta: `${vehicle.year_of_manufacture} · ${formatUsageKm(vehicle.usage_km)} · ${capitalize(vehicle.fuel_type)}`,
@@ -415,6 +425,7 @@ export function mapApiVehicleDetailToItem(detail: ApiVehicleDetail): VehicleItem
   const buyingPrice = formatRupees(detail.buying_details?.buying_price);
   const askingPrice = formatRupees(detail.pricing?.price_tag);
   const images = collectImages(detail.images);
+  const photos = collectImagesWithLabels(detail.images);
 
   return {
     id: String(basic.id),
@@ -424,13 +435,20 @@ export function mapApiVehicleDetailToItem(detail: ApiVehicleDetail): VehicleItem
     price: askingPrice,
     buyingPrice,
     askingPrice,
+    buyingPriceAmount: detail.buying_details?.buying_price ?? undefined,
     askingPriceAmount: detail.pricing?.price_tag ?? undefined,
+    buyingDate: detail.buying_details?.buying_date ?? undefined,
     status,
     meta: `${basic.year_of_manufacture} · ${formatUsageKm(basic.usage_km)} · ${capitalize(basic.fuel_type)}`,
     note: formatNote(status, basic.current_status?.started_at),
     icon: mapVehicleIcon(basic.vehicle_type),
     imageUrl: images[0]?.url,
     imageUrls: images.map((image) => image.url),
+    photos: photos.map((image) => ({
+      id: image.id,
+      url: image.url,
+      label: image.label,
+    })),
     photoCount: images.length,
     owner: '',
     color: basic.color ?? '',

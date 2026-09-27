@@ -11,6 +11,12 @@ export const PERMISSIONS = {
   VEHICLE_CREATE: 'vehicle:create',
   VEHICLE_UPDATE: 'vehicle:update',
   VEHICLE_DELETE: 'vehicle:delete',
+  /** Buying price / cost — owner & manager only; employees see asking price. */
+  VEHICLE_COST_READ: 'vehicle:cost:read',
+  /** Change garage / inspection / available state. */
+  VEHICLE_STATUS_UPDATE: 'vehicle:status:update',
+  /** Upload and view vehicle documents. */
+  VEHICLE_DOCUMENT_UPDATE: 'vehicle:document:update',
 
   EMPLOYEE_READ: 'employee:read',
   EMPLOYEE_CREATE: 'employee:create',
@@ -45,11 +51,14 @@ const ALL_PERMISSIONS = new Set<string>(Object.values(PERMISSIONS));
  * Mirrors what the API already enforces: managers may add members and edit the
  * showroom, only owners may change a member's role or delete a vehicle.
  */
-// Vehicles and account are the whole app for an employee: a read-only inventory
-// and a settings page with nothing but the theme toggle and sign out.
+// Employees browse inventory, update state/docs, and sell — not cost or core edit.
 const EMPLOYEE_PERMISSIONS: Permission[] = [
   PERMISSIONS.VEHICLE_READ,
+  PERMISSIONS.VEHICLE_STATUS_UPDATE,
+  PERMISSIONS.VEHICLE_DOCUMENT_UPDATE,
   PERMISSIONS.SHOWROOM_READ,
+  PERMISSIONS.SALE_READ,
+  PERMISSIONS.SALE_CREATE,
 ];
 
 const MANAGER_PERMISSIONS: Permission[] = [
@@ -57,12 +66,11 @@ const MANAGER_PERMISSIONS: Permission[] = [
   PERMISSIONS.DASHBOARD_READ,
   PERMISSIONS.VEHICLE_CREATE,
   PERMISSIONS.VEHICLE_UPDATE,
+  PERMISSIONS.VEHICLE_COST_READ,
   PERMISSIONS.EMPLOYEE_READ,
   PERMISSIONS.EMPLOYEE_CREATE,
   PERMISSIONS.EMPLOYEE_DELETE,
   PERMISSIONS.EXPENSE_CREATE,
-  PERMISSIONS.SALE_READ,
-  PERMISSIONS.SALE_CREATE,
   PERMISSIONS.SHOWROOM_UPDATE,
   PERMISSIONS.REPORTS_READ,
   PERMISSIONS.TAGS_READ,

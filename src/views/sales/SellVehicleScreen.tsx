@@ -55,14 +55,14 @@ export function SellVehicleScreen({
 
   const [name, setName] = useState(vehicleName ?? '');
   const [plate, setPlate] = useState(registration ?? '');
-  const [buyerName, setBuyerName] = useState('');
+  const [buyerFirstName, setBuyerFirstName] = useState('');
+  const [buyerLastName, setBuyerLastName] = useState('');
   const [buyerPhone, setBuyerPhone] = useState('');
   const [buyerEmail, setBuyerEmail] = useState('');
   const [buyerAddress, setBuyerAddress] = useState('');
   const [buyerCity, setBuyerCity] = useState('');
   const [buyerState, setBuyerState] = useState('');
   const [buyerPincode, setBuyerPincode] = useState('');
-  const [isBuyerDetailsOpen, setIsBuyerDetailsOpen] = useState(false);
   const [note, setNote] = useState('');
   /** The vehicle's tagged asking price. Read-only context for the negotiation. */
   const [askingPrice, setAskingPrice] = useState<number | null>(null);
@@ -75,7 +75,6 @@ export function SellVehicleScreen({
 
   const [errorMessage, setErrorMessage] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  const [isRecorded, setIsRecorded] = useState(false);
 
   // Prefills the asking price so the common case — sold at the tagged price —
   // is one tap. The form stays usable while this is in flight.
@@ -148,12 +147,17 @@ export function SellVehicleScreen({
     };
   }, [askingPrice, totals.sellingPrice]);
 
+  const buyerFullName = [buyerFirstName, buyerLastName]
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join(' ');
+
   const invoiceText = useMemo(
     () =>
       buildInvoiceText({
         vehicle: name,
         plate,
-        buyerName,
+        buyerName: buyerFullName,
         buyerPhone,
         buyerAddress: [buyerAddress, buyerCity, buyerState, buyerPincode]
           .map((part) => part.trim())
@@ -166,7 +170,7 @@ export function SellVehicleScreen({
     [
       name,
       plate,
-      buyerName,
+      buyerFullName,
       buyerPhone,
       buyerAddress,
       buyerCity,
@@ -179,7 +183,13 @@ export function SellVehicleScreen({
   );
 
   const handleGenerate = async () => {
-    const validationError = validate({ buyerName, buyerPhone, buyerAddress, totals });
+    const validationError = validate({
+      buyerFirstName,
+      buyerLastName,
+      buyerPhone,
+      buyerAddress,
+      totals,
+    });
 
     if (validationError) {
       setErrorMessage(validationError);
@@ -190,16 +200,14 @@ export function SellVehicleScreen({
     setIsSaving(true);
 
     try {
-      const { firstName, lastName } = splitBuyerName(buyerName);
-
       await sellVehicle(vehicleId, {
         salePrice: SALE_PRICE_BASIS === 'total' ? totals.total : totals.sellingPrice,
         saleDate: new Date().toISOString(),
         paymentMode,
         remarks: buildRemarks(note, totals, askingPrice),
         customer: {
-          firstName,
-          lastName,
+          firstName: buyerFirstName.trim(),
+          lastName: buyerLastName.trim(),
           phoneNumber: buyerPhone,
           email: buyerEmail,
           address: buyerAddress,
@@ -209,12 +217,12 @@ export function SellVehicleScreen({
         },
       });
 
-      setIsRecorded(true);
       showAlert({
         title: 'Invoice generated',
         message: `${name || 'Vehicle'} is now marked as sold.`,
         variant: 'success',
       });
+      router.back();
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : 'Could not record this sale.'
@@ -304,19 +312,33 @@ export function SellVehicleScreen({
           </View>
 
           <View style={styles.fields}>
-            <FormOutlinedInput
-              label="Buyer name"
-              value={buyerName}
-              onChangeText={setBuyerName}
-              placeholder="Name"
-              icon="person-outline"
-              autoCapitalize="words"
-            />
+            <View style={styles.nameRow}>
+              <View style={styles.nameColumn}>
+                <FormOutlinedInput
+                  label="First name"
+                  value={buyerFirstName}
+                  onChangeText={setBuyerFirstName}
+                  placeholder="First name"
+                  icon="person-outline"
+                  autoCapitalize="words"
+                />
+              </View>
+              <View style={styles.nameColumn}>
+                <FormOutlinedInput
+                  label="Last name"
+                  value={buyerLastName}
+                  onChangeText={setBuyerLastName}
+                  placeholder="Last name"
+                  icon="person-outline"
+                  autoCapitalize="words"
+                />
+              </View>
+            </View>
             <FormOutlinedInput
               label="Buyer phone"
               value={buyerPhone}
-              onChangeText={setBuyerPhone}
-              placeholder="Phone number"
+              onChangeText={(value) => setBuyerPhone(value.replace(/\D/g, '').slice(0, 10))}
+              placeholder="10-digit mobile number"
               icon="call-outline"
               keyboardType="phone-pad"
             />
@@ -327,70 +349,40 @@ export function SellVehicleScreen({
               placeholder="Address"
               icon="home-outline"
             />
-          </View>
-
-          <Pressable
-            onPress={() => setIsBuyerDetailsOpen((open) => !open)}
-            style={({ pressed }) => [
-              styles.disclosure,
-              {
-                backgroundColor: cardBackground,
-                borderColor: colors['outline-variant'],
-                opacity: pressed ? 0.9 : 1,
-              },
-            ]}>
-            <View style={styles.disclosureText}>
-              <Text style={[styles.disclosureTitle, { color: colors['on-surface'] }]}>
-                Buyer details
-              </Text>
-              <Text style={[styles.disclosureHint, { color: colors['on-surface-variant'] }]}>
-                City, state, pincode, email
-              </Text>
-            </View>
-            <Ionicons
-              name={isBuyerDetailsOpen ? 'chevron-up' : 'chevron-down'}
-              size={18}
-              color={colors['on-surface-variant']}
+            <FormOutlinedInput
+              label="City"
+              value={buyerCity}
+              onChangeText={setBuyerCity}
+              placeholder="City"
+              icon="business-outline"
+              autoCapitalize="words"
             />
-          </Pressable>
-
-          {isBuyerDetailsOpen ? (
-            <View style={styles.fields}>
-              <FormOutlinedInput
-                label="City"
-                value={buyerCity}
-                onChangeText={setBuyerCity}
-                placeholder="City"
-                icon="business-outline"
-                autoCapitalize="words"
-              />
-              <FormOutlinedInput
-                label="State"
-                value={buyerState}
-                onChangeText={setBuyerState}
-                placeholder="State"
-                icon="map-outline"
-                autoCapitalize="words"
-              />
-              <FormOutlinedInput
-                label="Pincode"
-                value={buyerPincode}
-                onChangeText={setBuyerPincode}
-                placeholder="Pincode"
-                icon="location-outline"
-                keyboardType="numeric"
-              />
-              <FormOutlinedInput
-                label="Email"
-                value={buyerEmail}
-                onChangeText={setBuyerEmail}
-                placeholder="Email"
-                icon="mail-outline"
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
-            </View>
-          ) : null}
+            <FormOutlinedInput
+              label="State"
+              value={buyerState}
+              onChangeText={setBuyerState}
+              placeholder="State"
+              icon="map-outline"
+              autoCapitalize="words"
+            />
+            <FormOutlinedInput
+              label="Pincode"
+              value={buyerPincode}
+              onChangeText={setBuyerPincode}
+              placeholder="Pincode"
+              icon="location-outline"
+              keyboardType="numeric"
+            />
+            <FormOutlinedInput
+              label="Email"
+              value={buyerEmail}
+              onChangeText={setBuyerEmail}
+              placeholder="Email"
+              icon="mail-outline"
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+          </View>
 
           <View
             style={[
@@ -509,7 +501,7 @@ export function SellVehicleScreen({
           <View style={styles.dividerRow}>
             <View style={[styles.dividerLine, { backgroundColor: colors['outline-variant'] }]} />
             <Text style={[styles.dividerText, { color: colors['on-surface-variant'] }]}>
-              AFTER GENERATING
+              SHARE INVOICE
             </Text>
             <View style={[styles.dividerLine, { backgroundColor: colors['outline-variant'] }]} />
           </View>
@@ -518,7 +510,7 @@ export function SellVehicleScreen({
             <ShareTile
               label="WhatsApp"
               icon={<MaterialCommunityIcons name="whatsapp" size={22} color="#25D366" />}
-              enabled={isRecorded}
+              enabled={Boolean(buyerFullName && totals.sellingPrice > 0)}
               onPress={handleWhatsApp}
             />
             <ShareTile
@@ -534,7 +526,7 @@ export function SellVehicleScreen({
             <ShareTile
               label="Share"
               icon={<Ionicons name="share-social-outline" size={22} color={colors.primary} />}
-              enabled={isRecorded}
+              enabled={Boolean(buyerFullName && totals.sellingPrice > 0)}
               onPress={handleShare}
             />
           </View>
@@ -547,8 +539,8 @@ export function SellVehicleScreen({
           ) : null}
 
           <Button
-            label={isRecorded ? 'Done' : 'Generate Invoice'}
-            onPress={isRecorded ? () => router.back() : handleGenerate}
+            label="Generate Invoice"
+            onPress={handleGenerate}
             loading={isSaving}
             disabled={isSaving}
           />
@@ -624,24 +616,6 @@ function formatAmountInput(value: string) {
 
 function formatRupees(amount: number) {
   return `₹${amount.toLocaleString('en-IN')}`;
-}
-
-/**
- * The API takes first and last name separately; the invoice asks for one buyer
- * name. Everything before the final word is the first name, so "Anjali Kumari
- * Sharma" keeps "Kumari" rather than dropping it.
- */
-function splitBuyerName(value: string) {
-  const parts = value.trim().split(/\s+/).filter(Boolean);
-
-  if (parts.length <= 1) {
-    return { firstName: parts[0] ?? '', lastName: '' };
-  }
-
-  return {
-    firstName: parts.slice(0, -1).join(' '),
-    lastName: parts[parts.length - 1],
-  };
 }
 
 /**
@@ -746,24 +720,28 @@ function buildInvoiceText({
  * rather than coming back as an unexplained "invalid request".
  */
 function validate({
-  buyerName,
+  buyerFirstName,
+  buyerLastName,
   buyerPhone,
   buyerAddress,
   totals,
 }: {
-  buyerName: string;
+  buyerFirstName: string;
+  buyerLastName: string;
   buyerPhone: string;
   buyerAddress: string;
   totals: { sellingPrice: number };
 }) {
-  const nameParts = buyerName.trim().split(/\s+/).filter(Boolean);
-
-  if (nameParts.length < 2) {
-    return "Enter the buyer's full name, first and last.";
+  if (!buyerFirstName.trim()) {
+    return "Enter the buyer's first name.";
   }
 
-  if (buyerPhone.replace(/\D/g, '').length < 10) {
-    return "Enter the buyer's phone number.";
+  if (!buyerLastName.trim()) {
+    return "Enter the buyer's last name.";
+  }
+
+  if (buyerPhone.replace(/\D/g, '').length !== 10) {
+    return 'Enter a 10-digit mobile number (without country code).';
   }
 
   if (!buyerAddress.trim()) {
@@ -838,6 +816,14 @@ const styles = StyleSheet.create({
   fields: {
     gap: 18,
     marginTop: 22,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  nameColumn: {
+    flex: 1,
+    minWidth: 0,
   },
   fieldLabel: {
     ...Typography.body,
@@ -939,31 +925,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 17,
     includeFontPadding: false,
-  },
-  disclosure: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    borderWidth: 1,
-    borderRadius: 14,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    marginTop: 18,
-  },
-  disclosureText: {
-    flex: 1,
-    gap: 3,
-    minWidth: 0,
-  },
-  disclosureTitle: {
-    fontFamily: FontFamily.medium,
-    fontSize: 14,
-    lineHeight: 19,
-    includeFontPadding: false,
-  },
-  disclosureHint: {
-    ...Typography.caption,
-    fontSize: 11,
   },
   noteField: {
     marginTop: 22,

@@ -15,7 +15,7 @@ import { FontFamily, Grid, Typography } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 import { listShowrooms } from '@/services';
 import { resolvePrimaryShowroomId } from '@/utils/showroom';
-import { BackButton, SkeletonBox } from '@/components/ui';
+import { BackButton, Button, SkeletonBox } from '@/components/ui';
 
 type ShowroomItem = {
   id: number;
@@ -108,21 +108,6 @@ export function ShowroomListScreen() {
           Manage your dealership locations
         </Text>
 
-        {/* Add Showroom Button */}
-        <Pressable
-          onPress={handleCreateShowroom}
-          style={({ pressed }) => [
-            styles.addButton,
-            {
-              backgroundColor: colors.primary,
-              opacity: pressed ? 0.85 : 1,
-              transform: [{ scale: pressed ? 0.98 : 1 }],
-            },
-          ]}>
-          <Ionicons name="add-circle" size={20} color={colors['on-primary']} />
-          <Text style={[styles.addButtonText, { color: colors['on-primary'] }]}>Add Showroom</Text>
-        </Pressable>
-
         {/* Showroom List */}
         {showrooms.length === 0 ? (
           <View style={styles.emptyState}>
@@ -150,6 +135,10 @@ export function ShowroomListScreen() {
           </View>
         )}
       </ScrollView>
+
+      <View style={[styles.footer, { paddingHorizontal: horizontalPadding }]}>
+        <Button label="Add Showroom" onPress={handleCreateShowroom} />
+      </View>
     </SafeAreaView>
   );
 }
@@ -225,20 +214,9 @@ const styles = StyleSheet.create({
   subtitle: {
     marginBottom: 20,
   },
-  addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
-    gap: 8,
-    marginBottom: 24,
-  },
-  addButtonText: {
-    fontFamily: FontFamily.medium,
-    fontSize: 16,
-    fontWeight: '600',
+  footer: {
+    paddingTop: 8,
+    paddingBottom: 12,
   },
   list: {
     gap: 0,

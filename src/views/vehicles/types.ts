@@ -11,6 +11,13 @@ export type VehicleCategory = Exclude<VehicleFilter, 'All'>;
 
 export type VehicleStatusFilter = 'All' | VehicleStatus;
 
+export type VehiclePhotoItem = {
+  id?: number;
+  url: string;
+  /** API section key — front | back | interior | exterior | wheel | … */
+  label: string;
+};
+
 export type VehicleItem = {
   id: string;
   name: string;
@@ -19,8 +26,12 @@ export type VehicleItem = {
   price: string;
   buyingPrice: string;
   askingPrice: string;
+  /** Raw buying_price from the API — used for inline price edits. */
+  buyingPriceAmount?: number;
   /** Raw price_tag, for places that need to format or compare it themselves. */
   askingPriceAmount?: number;
+  /** ISO buying_date from the API — required when patching pricing. */
+  buyingDate?: string;
   status: VehicleStatus;
   meta: string;
   note: string;
@@ -28,6 +39,11 @@ export type VehicleItem = {
   /** Primary photo. Signed URL from the API — expires roughly an hour after it is issued. */
   imageUrl?: string;
   imageUrls?: string[];
+  /**
+   * All photos with their API section label (front/back/…). A single label can
+   * hold more than one image — the detail gallery groups and pages by this.
+   */
+  photos?: VehiclePhotoItem[];
   owner: string;
   color: string;
   engineNumber: string;

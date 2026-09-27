@@ -4,6 +4,7 @@ import { Image } from 'expo-image';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Typography } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
+import { PERMISSIONS, usePermissions } from '@/permissions';
 import type { VehicleItem, VehicleStatus } from '../types';
 
 type VehicleCardProps = {
@@ -15,6 +16,8 @@ type VehicleCardProps = {
 // and on every filter change, and each card is a fairly deep subtree.
 function VehicleCardComponent({ vehicle, onPress }: VehicleCardProps) {
   const { colors } = useTheme();
+  const { can } = usePermissions();
+  const canSeeCost = can(PERMISSIONS.VEHICLE_COST_READ);
   const statusColors = getStatusColors(vehicle.status, colors);
   const handlePress = useCallback(() => onPress?.(vehicle.id), [onPress, vehicle.id]);
 
@@ -72,8 +75,12 @@ function VehicleCardComponent({ vehicle, onPress }: VehicleCardProps) {
 
         <View style={styles.priceRow}>
           <View>
-            <Text style={[styles.priceCaption, { color: colors['on-surface-variant'] }]}>Buying</Text>
-            <Text style={[styles.priceValue, { color: colors.primary }]}>{vehicle.buyingPrice}</Text>
+            <Text style={[styles.priceCaption, { color: colors['on-surface-variant'] }]}>
+              {canSeeCost ? 'Buying' : 'Asking'}
+            </Text>
+            <Text style={[styles.priceValue, { color: colors.primary }]}>
+              {canSeeCost ? vehicle.buyingPrice : vehicle.askingPrice}
+            </Text>
           </View>
           {vehicle.note && (
             <Text style={[styles.timeIndicator, { color: colors['on-surface-variant'] }]}>

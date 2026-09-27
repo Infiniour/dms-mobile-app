@@ -1,0 +1,168 @@
+diff --git a/node_modules/react-native-paper/lib/commonjs/components/TextInput/Label/LabelBackground.js b/node_modules/react-native-paper/lib/commonjs/components/TextInput/Label/LabelBackground.js
+index 6ecbb2c..2199327 100644
+--- a/node_modules/react-native-paper/lib/commonjs/components/TextInput/Label/LabelBackground.js
++++ b/node_modules/react-native-paper/lib/commonjs/components/TextInput/Label/LabelBackground.js
+@@ -32,10 +32,13 @@ const LabelBackground = ({
+       outputRange: [-baseLabelTranslateX, 0]
+     })
+   };
++  // Keep the cover at full height while floated. Paper used scaleY 0.2 which
++  // often missed the 1px outline on Android, so the border cut through the
++  // label text. Opacity already hides this cover when the label is resting.
+   const labelTextScaleY = {
+     scaleY: labeled.interpolate({
+       inputRange: [0, 1],
+-      outputRange: [0.2, 1]
++      outputRange: [1, 1]
+     })
+   };
+   const labelTextTransform = [...labelStyle.transform, labelTextScaleY];
+@@ -51,15 +54,20 @@ const LabelBackground = ({
+       opacity
+     }]
+   }) : null;
++  const paddingHorizontal = typeof (placeholderStyle === null || placeholderStyle === void 0 ? void 0 : placeholderStyle.paddingHorizontal) === 'number' ? placeholderStyle.paddingHorizontal : 0;
+   return [roundedEdgeCover, /*#__PURE__*/React.createElement(_AnimatedText.default, {
+     key: "labelBackground-text",
+     testID: `${testID}-label-background`,
+-    style: [placeholderStyle, labelStyle, styles.outlinedLabel, {
++    // Do NOT spread `labelStyle` here. It carries an opacity of 0 when the
++    // floated label is inactive (unfocused), which made this cover
++    // invisible on Android so the outline drew through the label text.
++    style: [placeholderStyle, styles.outlinedLabel, {
+       top: topPosition + 1,
+-      width: labelLayoutWidth - placeholderStyle.paddingHorizontal,
++      width: Math.max(labelLayoutWidth - paddingHorizontal, 0) + 8,
+       height: labelLayoutHeight,
+       backgroundColor,
+       opacity,
++      paddingHorizontal: 4,
+       transform: labelTextTransform
+     }],
+     numberOfLines: 1,
+@@ -77,8 +85,8 @@ const styles = _reactNative.StyleSheet.create({
+   // eslint-disable-next-line react-native/no-color-literals
+   outlinedLabel: {
+     position: 'absolute',
+-    left: 8,
+-    paddingHorizontal: 0,
++    left: 4,
++    paddingHorizontal: 4,
+     color: 'transparent'
+   }
+ });
+diff --git a/node_modules/react-native-paper/lib/module/components/TextInput/Label/LabelBackground.js b/node_modules/react-native-paper/lib/module/components/TextInput/Label/LabelBackground.js
+index 9bf457c..c231ceb 100644
+--- a/node_modules/react-native-paper/lib/module/components/TextInput/Label/LabelBackground.js
++++ b/node_modules/react-native-paper/lib/module/components/TextInput/Label/LabelBackground.js
+@@ -24,10 +24,13 @@ const LabelBackground = ({
+       outputRange: [-baseLabelTranslateX, 0]
+     })
+   };
++  // Keep the cover at full height while floated. Paper used scaleY 0.2 which
++  // often missed the 1px outline on Android, so the border cut through the
++  // label text. Opacity already hides this cover when the label is resting.
+   const labelTextScaleY = {
+     scaleY: labeled.interpolate({
+       inputRange: [0, 1],
+-      outputRange: [0.2, 1]
++      outputRange: [1, 1]
+     })
+   };
+   const labelTextTransform = [...labelStyle.transform, labelTextScaleY];
+@@ -43,15 +46,20 @@ const LabelBackground = ({
+       opacity
+     }]
+   }) : null;
++  const paddingHorizontal = typeof placeholderStyle?.paddingHorizontal === 'number' ? placeholderStyle.paddingHorizontal : 0;
+   return [roundedEdgeCover, /*#__PURE__*/React.createElement(AnimatedText, {
+     key: "labelBackground-text",
+     testID: `${testID}-label-background`,
+-    style: [placeholderStyle, labelStyle, styles.outlinedLabel, {
++    // Do NOT spread `labelStyle` here. It carries an opacity of 0 when the
++    // floated label is inactive (unfocused), which made this cover
++    // invisible on Android so the outline drew through the label text.
++    style: [placeholderStyle, styles.outlinedLabel, {
+       top: topPosition + 1,
+-      width: labelLayoutWidth - placeholderStyle.paddingHorizontal,
++      width: Math.max(labelLayoutWidth - paddingHorizontal, 0) + 8,
+       height: labelLayoutHeight,
+       backgroundColor,
+       opacity,
++      paddingHorizontal: 4,
+       transform: labelTextTransform
+     }],
+     numberOfLines: 1,
+@@ -69,8 +77,8 @@ const styles = StyleSheet.create({
+   // eslint-disable-next-line react-native/no-color-literals
+   outlinedLabel: {
+     position: 'absolute',
+-    left: 8,
+-    paddingHorizontal: 0,
++    left: 4,
++    paddingHorizontal: 4,
+     color: 'transparent'
+   }
+ });
+diff --git a/node_modules/react-native-paper/src/components/TextInput/Label/LabelBackground.tsx b/node_modules/react-native-paper/src/components/TextInput/Label/LabelBackground.tsx
+index 409606d..07e6f8d 100644
+--- a/node_modules/react-native-paper/src/components/TextInput/Label/LabelBackground.tsx
++++ b/node_modules/react-native-paper/src/components/TextInput/Label/LabelBackground.tsx
+@@ -29,10 +29,13 @@ const LabelBackground = ({
+     }),
+   };
+ 
++  // Keep the cover at full height while floated. Paper used scaleY 0.2 which
++  // often missed the 1px outline on Android, so the border cut through the
++  // label text. Opacity already hides this cover when the label is resting.
+   const labelTextScaleY = {
+     scaleY: labeled.interpolate({
+       inputRange: [0, 1],
+-      outputRange: [0.2, 1],
++      outputRange: [1, 1],
+     }),
+   };
+ 
+@@ -57,21 +60,29 @@ const LabelBackground = ({
+     />
+   ) : null;
+ 
++  const paddingHorizontal =
++    typeof placeholderStyle?.paddingHorizontal === 'number'
++      ? placeholderStyle.paddingHorizontal
++      : 0;
++
+   return [
+     roundedEdgeCover,
+     <AnimatedText
+       key="labelBackground-text"
+       testID={`${testID}-label-background`}
+       style={[
++        // Do NOT spread `labelStyle` here. It carries an opacity of 0 when the
++        // floated label is inactive (unfocused), which made this cover
++        // invisible on Android so the outline drew through the label text.
+         placeholderStyle,
+-        labelStyle,
+         styles.outlinedLabel,
+         {
+           top: topPosition + 1,
+-          width: labelLayoutWidth - placeholderStyle.paddingHorizontal,
++          width: Math.max(labelLayoutWidth - paddingHorizontal, 0) + 8,
+           height: labelLayoutHeight,
+           backgroundColor,
+           opacity,
++          paddingHorizontal: 4,
+           transform: labelTextTransform,
+         },
+       ]}
+@@ -93,8 +104,8 @@ const styles = StyleSheet.create({
+   // eslint-disable-next-line react-native/no-color-literals
+   outlinedLabel: {
+     position: 'absolute',
+-    left: 8,
+-    paddingHorizontal: 0,
++    left: 4,
++    paddingHorizontal: 4,
+     color: 'transparent',
+   },
+ });

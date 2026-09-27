@@ -4,6 +4,7 @@ import { Image } from 'expo-image';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Typography } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
+import { PERMISSIONS, usePermissions } from '@/permissions';
 import type { VehicleItem, VehicleStatus } from '../types';
 
 type VehicleCardCompactProps = {
@@ -13,6 +14,8 @@ type VehicleCardCompactProps = {
 
 function VehicleCardCompactComponent({ vehicle, onPress }: VehicleCardCompactProps) {
   const { colors } = useTheme();
+  const { can } = usePermissions();
+  const canSeeCost = can(PERMISSIONS.VEHICLE_COST_READ);
   const statusColors = getStatusColors(vehicle.status, colors);
   const handlePress = useCallback(() => onPress?.(vehicle.id), [onPress, vehicle.id]);
 
@@ -66,7 +69,9 @@ function VehicleCardCompactComponent({ vehicle, onPress }: VehicleCardCompactPro
         </Text>
 
         <View style={styles.footer}>
-          <Text style={[styles.price, { color: colors.primary }]}>{vehicle.buyingPrice}</Text>
+          <Text style={[styles.price, { color: colors.primary }]}>
+            {canSeeCost ? vehicle.buyingPrice : vehicle.askingPrice}
+          </Text>
           {vehicle.note && (
             <Text style={[styles.note, { color: colors['on-surface-variant'] }]}>{vehicle.note}</Text>
           )}

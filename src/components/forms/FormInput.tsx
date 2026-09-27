@@ -20,6 +20,7 @@ type FormInputProps = {
   editable?: boolean;
   required?: boolean;
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
+  multiline?: boolean;
 };
 
 /**
@@ -36,6 +37,7 @@ export function FormInput({
   editable = true,
   required = false,
   autoCapitalize,
+  multiline,
 }: FormInputProps) {
   return (
     <FloatingField
@@ -47,6 +49,8 @@ export function FormInput({
       keyboardType={keyboardType}
       editable={editable}
       autoCapitalize={autoCapitalize}
+      multiline={multiline}
+      numberOfLines={multiline ? 3 : undefined}
       style={styles.field}
     />
   );

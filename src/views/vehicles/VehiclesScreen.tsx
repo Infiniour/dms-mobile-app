@@ -28,6 +28,8 @@ type ViewMode = 'card' | 'compact';
 
 const LISTING_LIMIT = 100;
 const emptyGroup = { total: 0, page: 1, limit: LISTING_LIMIT, vehicles: [] };
+/** Inventory list excludes sold — those live on the sales panel. */
+const INVENTORY_STATUSES = ['garage', 'inspection', 'ready_for_sale'] as const;
 
 type ShowroomRole = { showroom_id: number; role?: string | null };
 type ProfileData = { showroom_roles?: ShowroomRole[] | null };
@@ -76,7 +78,11 @@ export function VehiclesScreen() {
           throw new Error('No showroom found for this account yet.');
         }
 
-        const response = await listVehicles({ showroomId, limit: LISTING_LIMIT });
+        const response = await listVehicles({
+          showroomId,
+          status: [...INVENTORY_STATUSES],
+          limit: LISTING_LIMIT,
+        });
         if (isCancelled()) {
           return;
         }

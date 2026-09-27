@@ -3,7 +3,8 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { FontFamily, Grid } from '@/constants/theme';
+import { FontFamily, Grid, Typography } from '@/constants/theme';
+import { BottomSheet } from '@/components/ui';
 import { useLogout } from '@/hooks/useLogout';
 import { useTheme } from '@/hooks/useTheme';
 import { PERMISSIONS, usePermissions } from '@/permissions';
@@ -23,7 +24,31 @@ type ProfileData = {
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
-const THEME_CYCLE: ThemePreference[] = ['system', 'light', 'dark'];
+const THEME_OPTIONS: {
+  value: ThemePreference;
+  label: string;
+  hint: string;
+  icon: IconName;
+}[] = [
+  {
+    value: 'system',
+    label: 'System',
+    hint: 'Match your device setting',
+    icon: 'phone-portrait-outline',
+  },
+  {
+    value: 'light',
+    label: 'Light',
+    hint: 'Always use light appearance',
+    icon: 'sunny-outline',
+  },
+  {
+    value: 'dark',
+    label: 'Dark',
+    hint: 'Always use dark appearance',
+    icon: 'moon-outline',
+  },
+];
 
 function themePreferenceLabel(preference: ThemePreference) {
   if (preference === 'light') {
@@ -46,11 +71,7 @@ export default function AccountTab() {
   const themePreference = useThemeStore((s) => s.themePreference);
   const setThemePreference = useThemeStore((s) => s.setThemePreference);
   const [profile, setProfile] = useState<ProfileData | null>(null);
-
-  const cycleThemePreference = () => {
-    const nextIndex = (THEME_CYCLE.indexOf(themePreference) + 1) % THEME_CYCLE.length;
-    setThemePreference(THEME_CYCLE[nextIndex]);
-  };
+  const [isThemeSheetOpen, setIsThemeSheetOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -103,17 +124,6 @@ export default function AccountTab() {
           </View>
           <Text style={[styles.name, { color: colors['on-surface'] }]}>{displayName}</Text>
           <Text style={[styles.roleLine, { color: colors['on-surface-variant'] }]}>{roleLine}</Text>
-          <Pressable
-            style={({ pressed }) => [
-              styles.editPill,
-              {
-                backgroundColor: colors.primary,
-                transform: [{ scale: pressed ? 0.96 : 1 }]
-              },
-            ]}>
-            <Ionicons name="pencil" size={16} color={colors['on-primary']} />
-            <Text style={[styles.editPillText, { color: colors['on-primary'] }]}>Edit Profile</Text>
-          </Pressable>
         </View>
 
         <View style={styles.rows}>
@@ -164,10 +174,10 @@ export default function AccountTab() {
             ) : null}
             <SettingsRow
               icon={themePreference === 'dark' ? 'moon' : 'moon-outline'}
-              title="Dark mode"
+              title="Appearance"
               subtitle={themePreferenceLabel(themePreference)}
               trailing="chevron"
-              onPress={cycleThemePreference}
+              onPress={() => setIsThemeSheetOpen(true)}
             />
           </View>
 
@@ -179,7 +189,7 @@ export default function AccountTab() {
               {
                 backgroundColor: colors['error-container'],
                 opacity: pressed ? 0.85 : 1,
-                transform: [{ scale: pressed ? 0.98 : 1 }]
+                transform: [{ scale: pressed ? 0.98 : 1 }],
               },
             ]}>
             <Ionicons name="log-out-outline" size={22} color={colors.error} />
@@ -189,6 +199,59 @@ export default function AccountTab() {
           </Pressable>
         </View>
       </ScrollView>
+
+      <BottomSheet visible={isThemeSheetOpen} onClose={() => setIsThemeSheetOpen(false)}>
+        <Text style={[Typography.title, styles.sheetTitle, { color: colors['on-background'] }]}>
+          Appearance
+        </Text>
+        <Text style={[Typography.body, styles.sheetSubtitle, { color: colors['on-surface-variant'] }]}>
+          Choose how the app looks
+        </Text>
+        <View style={styles.themeOptions}>
+          {THEME_OPTIONS.map((option) => {
+            const selected = option.value === themePreference;
+
+            return (
+              <Pressable
+                key={option.value}
+                onPress={() => {
+                  setThemePreference(option.value);
+                  setIsThemeSheetOpen(false);
+                }}
+                style={({ pressed }) => [
+                  styles.themeOption,
+                  {
+                    backgroundColor: selected
+                      ? colors['surface-container']
+                      : colors['surface-container-low'],
+                    borderColor: selected ? colors.primary : colors['outline-variant'],
+                    opacity: pressed ? 0.9 : 1,
+                  },
+                ]}>
+                <View
+                  style={[styles.themeOptionIcon, { backgroundColor: colors['surface-container'] }]}>
+                  <Ionicons
+                    name={option.icon}
+                    size={22}
+                    color={selected ? colors.primary : colors['on-surface-variant']}
+                  />
+                </View>
+                <View style={styles.themeOptionText}>
+                  <Text style={[styles.themeOptionLabel, { color: colors['on-surface'] }]}>
+                    {option.label}
+                  </Text>
+                  <Text style={[styles.themeOptionHint, { color: colors['on-surface-variant'] }]}>
+                    {option.hint}
+                  </Text>
+                </View>
+                {selected ? (
+                  <Ionicons name="checkmark-circle" size={22} color={colors.primary} />
+                ) : null}
+              </Pressable>
+            );
+          })}
+        </View>
+      </BottomSheet>
     </SafeAreaView>
   );
 }
@@ -304,19 +367,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
-  editPill: {
-    borderRadius: 24,
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-    marginTop: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  editPillText: {
-    fontFamily: FontFamily.medium,
-    fontSize: 14,
-  },
   rows: {
     gap: 20,
     marginTop: 28,
@@ -374,5 +424,46 @@ const styles = StyleSheet.create({
   logoutText: {
     fontFamily: FontFamily.medium,
     fontSize: 16,
+  },
+  sheetTitle: {
+    textAlign: 'center',
+  },
+  sheetSubtitle: {
+    textAlign: 'center',
+    marginTop: 4,
+    marginBottom: 16,
+  },
+  themeOptions: {
+    gap: 10,
+  },
+  themeOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+  },
+  themeOptionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  themeOptionText: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
+  },
+  themeOptionLabel: {
+    fontFamily: FontFamily.medium,
+    fontSize: 15,
+  },
+  themeOptionHint: {
+    fontFamily: FontFamily.regular,
+    fontSize: 12,
+    lineHeight: 16,
   },
 });

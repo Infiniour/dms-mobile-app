@@ -1411,7 +1411,13 @@ function ShowroomPart({
           ) : null}
         </Pressable>
 
-        <FloatingField label="Address" value={address} onChangeText={onAddressChange} />
+        <FloatingField
+          label="Address"
+          value={address}
+          onChangeText={onAddressChange}
+          multiline
+          numberOfLines={3}
+        />
 
         <View style={styles.fieldRow}>
           <View style={styles.fieldColumn}>

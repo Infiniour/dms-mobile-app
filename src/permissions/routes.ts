@@ -21,7 +21,7 @@ export const ROUTE_PERMISSIONS: Record<string, Permission | null> = {
   '/vehicle/add': PERMISSIONS.VEHICLE_CREATE,
   '/vehicle/expense/[id]': PERMISSIONS.EXPENSE_CREATE,
   '/vehicle/sell/[id]': PERMISSIONS.SALE_CREATE,
-  '/vehicle/documents/[id]': PERMISSIONS.VEHICLE_UPDATE,
+  '/vehicle/documents/[id]': PERMISSIONS.VEHICLE_DOCUMENT_UPDATE,
   '/notifications': PERMISSIONS.NOTIFICATION_READ,
 };
 
