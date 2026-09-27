@@ -27,7 +27,9 @@ export function useLogout() {
     await clearTokens();
     resetAuthState();
     setIsLoggingOut(false);
-    router.replace('/(auth)/login');
+    // Land on Get Started (auth index), not the phone screen — replace so
+    // setup/app history is cleared and Android back can't re-enter a logged-out session.
+    router.replace('/(auth)');
   }, [isLoggingOut, resetAuthState, router]);
 
   return {

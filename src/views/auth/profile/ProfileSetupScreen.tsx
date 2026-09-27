@@ -1,7 +1,18 @@
 import { useRef, useState } from 'react';
-import { Alert, View, Text, Pressable, StyleSheet, TextInput } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  Alert,
+  Keyboard,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import {
+  KeyboardAwareScrollView,
+  KeyboardStickyView,
+} from 'react-native-keyboard-controller';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useLogout } from '@/hooks/useLogout';
@@ -22,6 +33,7 @@ type ProfileResponse = {
 
 export function ProfileSetupScreen() {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { isLoggingOut, logout } = useLogout();
   const setStoredFullName = useAuthStore((s) => s.setFullName);
@@ -35,6 +47,7 @@ export function ProfileSetupScreen() {
   const canContinue = firstName.trim().length > 0 && lastName.trim().length > 0;
 
   const handleLogout = () => {
+    Keyboard.dismiss();
     Alert.alert('Log out?', 'You can finish setting up your profile later.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Log Out', style: 'destructive', onPress: logout },
@@ -48,6 +61,7 @@ export function ProfileSetupScreen() {
       return;
     }
 
+    Keyboard.dismiss();
     setErrorMessage('');
     setIsSaving(true);
 
@@ -55,8 +69,6 @@ export function ProfileSetupScreen() {
       await updateProfile({ name: nextName });
       setStoredFullName(nextName);
 
-      // Fetch the just-updated profile and route straight to the next step,
-      // instead of bouncing through /(setup)/loading a second time.
       const response = await getProfile();
       const profile = (response as unknown as ProfileResponse).data;
 
@@ -82,83 +94,87 @@ export function ProfileSetupScreen() {
   return (
     <SafeAreaView
       style={[styles.screen, { backgroundColor: colors.background }]}
-      edges={['top', 'bottom']}>
-      <KeyboardAvoidingView
+      edges={['top']}>
+      <KeyboardAwareScrollView
         style={styles.flex}
-        behavior="padding"
-        keyboardVerticalOffset={8}>
-        <View style={styles.content}>
-          <View style={styles.header}>
-            <View style={styles.titleRow}>
-              <Text style={[Typography.hero, styles.title, { color: colors['on-background'] }]}>
-                Welcome!
-              </Text>
-              <Pressable
-                onPress={handleLogout}
-                disabled={isLoggingOut}
-                hitSlop={8}
-                style={({ pressed }) => [
-                  styles.logoutButton,
-                  {
-                    borderColor: colors.outline,
-                    opacity: pressed || isLoggingOut ? 0.6 : 1,
-                  },
-                ]}>
-                <Ionicons name="log-out-outline" size={16} color={colors['on-surface-variant']} />
-              </Pressable>
-            </View>
-            <Text
-              style={[
-                Typography.body,
-                styles.subtitle,
-                { color: colors['on-surface-variant'] },
+        bottomOffset={24}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}>
+        <View style={styles.header}>
+          <View style={styles.titleRow}>
+            <Text style={[Typography.hero, styles.title, { color: colors['on-background'] }]}>
+              Welcome!
+            </Text>
+            <Pressable
+              onPress={handleLogout}
+              disabled={isLoggingOut}
+              hitSlop={8}
+              style={({ pressed }) => [
+                styles.logoutButton,
+                {
+                  borderColor: colors.outline,
+                  opacity: pressed || isLoggingOut ? 0.6 : 1,
+                },
               ]}>
-              Set up your profile to get started
-            </Text>
+              <Ionicons name="log-out-outline" size={16} color={colors['on-surface-variant']} />
+            </Pressable>
           </View>
-
-          <View style={styles.fields}>
-            <FloatingField
-              label="First name"
-              value={firstName}
-              onChangeText={setFirstName}
-              autoComplete="given-name"
-              textContentType="givenName"
-              autoCapitalize="words"
-              autoCorrect={false}
-              returnKeyType="next"
-              onSubmitEditing={() => lastNameRef.current?.focus()}
-            />
-            <FloatingField
-              ref={lastNameRef}
-              label="Last name"
-              value={lastName}
-              onChangeText={setLastName}
-              autoComplete="family-name"
-              textContentType="familyName"
-              autoCapitalize="words"
-              autoCorrect={false}
-              returnKeyType="done"
-              onSubmitEditing={handleContinue}
-            />
-          </View>
-
-          {errorMessage ? (
-            <Text style={[Typography.caption, styles.errorText, { color: colors.error }]}>
-              {errorMessage}
-            </Text>
-          ) : null}
-
-          <View style={styles.footer}>
-            <Button
-              label="Continue"
-              onPress={handleContinue}
-              disabled={!canContinue || isSaving}
-              loading={isSaving}
-            />
-          </View>
+          <Text
+            style={[
+              Typography.body,
+              styles.subtitle,
+              { color: colors['on-surface-variant'] },
+            ]}>
+            Set up your profile to get started
+          </Text>
         </View>
-      </KeyboardAvoidingView>
+
+        <View style={styles.fields}>
+          <FloatingField
+            label="First name"
+            value={firstName}
+            onChangeText={setFirstName}
+            autoComplete="given-name"
+            textContentType="givenName"
+            autoCapitalize="words"
+            autoCorrect={false}
+            returnKeyType="next"
+            blurOnSubmit={false}
+            onSubmitEditing={() => lastNameRef.current?.focus()}
+          />
+          <FloatingField
+            ref={lastNameRef}
+            label="Last name"
+            value={lastName}
+            onChangeText={setLastName}
+            autoComplete="family-name"
+            textContentType="familyName"
+            autoCapitalize="words"
+            autoCorrect={false}
+            returnKeyType="done"
+            onSubmitEditing={handleContinue}
+          />
+        </View>
+
+        {errorMessage ? (
+          <Text style={[Typography.caption, styles.errorText, { color: colors.error }]}>
+            {errorMessage}
+          </Text>
+        ) : null}
+      </KeyboardAwareScrollView>
+
+      <KeyboardStickyView
+        offset={{ closed: 0, opened: insets.bottom }}
+        style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 24) }]}>
+        <Button
+          label="Continue"
+          onPress={handleContinue}
+          disabled={!canContinue || isSaving}
+          loading={isSaving}
+        />
+      </KeyboardStickyView>
     </SafeAreaView>
   );
 }
@@ -170,11 +186,10 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1,
   },
-  content: {
-    flex: 1,
+  scrollContent: {
     paddingHorizontal: Grid.columns.margin,
     paddingTop: 50,
-    paddingBottom: 24,
+    paddingBottom: 16,
     gap: 24,
   },
   titleRow: {
@@ -206,7 +221,8 @@ const styles = StyleSheet.create({
     gap: 20,
   },
   footer: {
-    marginTop: 'auto',
+    paddingHorizontal: Grid.columns.margin,
+    paddingTop: 10,
   },
   errorText: {
     marginTop: -12,

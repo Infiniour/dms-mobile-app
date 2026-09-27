@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { View, Text, StyleSheet, Keyboard } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import {
+  KeyboardAwareScrollView,
+  KeyboardStickyView,
+} from 'react-native-keyboard-controller';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/hooks/useTheme';
 import { Typography, Grid } from '@/constants/theme';
-import { BackButton, Button, TextField } from '@/components/ui';
+import { BackButton, Button, FloatingField } from '@/components/ui';
 import { sendOtp } from '@/services';
 import { useAuthStore } from '@/store';
 import { OtpSheet } from './OtpSheet';
@@ -22,6 +24,7 @@ type SendOtpResponse = {
 
 export function LoginScreen() {
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const setIsLoggedIn = useAuthStore((s) => s.setIsLoggedIn);
   const setCanEnterApp = useAuthStore((s) => s.setCanEnterApp);
@@ -42,6 +45,7 @@ export function LoginScreen() {
       return;
     }
 
+    Keyboard.dismiss();
     setErrorMessage('');
     setIsSendingOtp(true);
 
@@ -86,64 +90,81 @@ export function LoginScreen() {
   return (
     <SafeAreaView
       style={[styles.screen, { backgroundColor: colors.background }]}
-      edges={['top', 'bottom']}>
-      <KeyboardAvoidingView
+      edges={['top']}>
+      {/*
+        Auth page pattern from keyboard-controller:
+        - KeyboardAwareScrollView for the field (keeps it visible)
+        - KeyboardStickyView for the CTA (rides the keyboard, like OTP sheet)
+        Don't put the button inside a space-between scroll — the layout spacer
+        fights that and either gaps or covers the button.
+      */}
+      <KeyboardAwareScrollView
         style={styles.flex}
-        behavior="padding"
-        keyboardVerticalOffset={8}>
-        <View style={styles.content}>
-          <BackButton />
-
-          <View style={styles.header}>
-            <Text style={[Typography.hero, styles.title, { color: colors['on-background'] }]}>
-              Enter your phone{'\n'}number
-            </Text>
-            <Text
-              style={[
-                Typography.body,
-                styles.subtitle,
-                { color: colors['on-surface-variant'] },
-              ]}>
-              We'll send a one-time password to verify your number
-            </Text>
-          </View>
-
-          <TextField
-            label="Phone number"
-            labelIcon={
-              <Ionicons name="call-outline" size={14} color={colors.primary} />
+        bottomOffset={24}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}>
+        <BackButton
+          onPress={() => {
+            Keyboard.dismiss();
+            if (router.canGoBack()) {
+              router.back();
+              return;
             }
-            value={phoneNumber}
-            onChangeText={handlePhoneNumberChange}
-            placeholder="XXXXX XXXXX"
-            keyboardType="number-pad"
-            autoComplete="tel"
-            textContentType="telephoneNumber"
-            maxLength={10}
-          />
 
-          {errorMessage ? (
-            <Text style={[Typography.caption, styles.errorText, { color: colors.error }]}>
-              {errorMessage}
-            </Text>
-          ) : null}
+            router.replace('/(auth)');
+          }}
+        />
 
-          <View style={styles.footer}>
-            <Button
-              label="Get OTP"
-              onPress={handleGetOtp}
-              disabled={!isValidPhoneNumber || isSendingOtp}
-              loading={isSendingOtp}
-            />
-            <Text style={[Typography.micro, styles.terms, { color: colors['on-surface-variant'] }]}>
-              By continuing you agree to our{' '}
-              <Text style={{ color: isDark ? colors['secondary-container'] : colors['primary-container'] }}>
-                Terms of service
-              </Text>
-            </Text>
-          </View>
+        <View style={styles.header}>
+          <Text style={[Typography.hero, styles.title, { color: colors['on-background'] }]}>
+            Enter your phone{'\n'}number
+          </Text>
+          <Text
+            style={[
+              Typography.body,
+              styles.subtitle,
+              { color: colors['on-surface-variant'] },
+            ]}>
+            We'll send a one-time password to verify your number
+          </Text>
         </View>
-      </KeyboardAvoidingView>
+
+        <FloatingField
+          label="Phone number"
+          icon="call-outline"
+          value={phoneNumber}
+          onChangeText={handlePhoneNumberChange}
+          keyboardType="number-pad"
+          autoComplete="tel"
+          textContentType="telephoneNumber"
+          maxLength={10}
+          onSubmitEditing={handleGetOtp}
+        />
+
+        {errorMessage ? (
+          <Text style={[Typography.caption, styles.errorText, { color: colors.error }]}>
+            {errorMessage}
+          </Text>
+        ) : null}
+      </KeyboardAwareScrollView>
+
+      <KeyboardStickyView
+        offset={{ closed: 0, opened: insets.bottom }}
+        style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 24) }]}>
+        <Button
+          label="Get OTP"
+          onPress={handleGetOtp}
+          disabled={!isValidPhoneNumber || isSendingOtp}
+          loading={isSendingOtp}
+        />
+        <Text style={[Typography.micro, styles.terms, { color: colors['on-surface-variant'] }]}>
+          By continuing you agree to our{' '}
+          <Text style={{ color: isDark ? colors['secondary-container'] : colors['primary-container'] }}>
+            Terms of service
+          </Text>
+        </Text>
+      </KeyboardStickyView>
 
       <OtpSheet
         visible={showOtpSheet}
@@ -164,11 +185,10 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1,
   },
-  content: {
-    flex: 1,
+  scrollContent: {
     paddingHorizontal: Grid.columns.margin,
     paddingTop: 50,
-    paddingBottom: 24,
+    paddingBottom: 16,
     gap: 24,
   },
   header: {
@@ -183,8 +203,10 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   footer: {
-    marginTop: 'auto',
+    paddingHorizontal: Grid.columns.margin,
+    paddingTop: 10,
     gap: 16,
+    backgroundColor: 'transparent',
   },
   errorText: {
     marginTop: -12,

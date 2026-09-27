@@ -1454,10 +1454,13 @@ function ShowroomPart({
           maxLength={6}
         />
 
-        <View style={styles.fieldGroup}>
-          <FieldLabel label="Phone number" />
-          <ReadonlyField value={phoneNumber || 'Phone number'} />
-        </View>
+        <FloatingField
+          label="Phone number"
+          icon="call-outline"
+          value={phoneNumber}
+          editable={false}
+          selectTextOnFocus={false}
+        />
       </View>
     </View>
   );
@@ -1893,26 +1896,6 @@ function FieldLabel({ label }: { label: string }) {
   );
 }
 
-function ReadonlyField({ value }: { value: string }) {
-  const { colors } = useTheme();
-
-  return (
-    <View
-      style={[
-        styles.readonlyField,
-        {
-          borderColor: colors.outline,
-          backgroundColor: colors.background,
-        },
-      ]}>
-      <Ionicons name="call-outline" size={20} color={colors.primary} />
-      <Text style={[Typography.body, styles.readonlyText, { color: colors['on-surface'] }]}>
-        {value}
-      </Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
@@ -2240,21 +2223,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 19,
     fontFamily: FontFamily.medium,
-  },
-  readonlyField: {
-    minHeight: 77,
-    borderRadius: 20,
-    borderWidth: 1.4,
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  readonlyText: {
-    flex: 1,
-    fontSize: 15,
-    lineHeight: 22,
-    fontFamily: Typography.body.fontFamily,
   },
   locationButton: {
     minHeight: 56,
